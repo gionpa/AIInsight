@@ -2,23 +2,29 @@ spring:
   application:
     name: aiinsight
 
+  # 빠른 시작을 위한 Lazy 초기화 (Railway healthcheck 대응)
+  main:
+    lazy-initialization: false  # 전체 lazy는 문제 가능, 개별 설정 사용
+
   datasource:
-    # Railway DATABASE_URL이 있으면 사용, 없으면 개별 설정 사용
-    url: ${DATABASE_URL:jdbc:postgresql://${PGHOST:yamanote.proxy.rlwy.net}:${PGPORT:51273}/${PGDATABASE:railway}}
+    # Railway 환경변수 사용 (PGHOST, PGPORT 등 개별 변수)
+    url: jdbc:postgresql://${PGHOST:yamanote.proxy.rlwy.net}:${PGPORT:51273}/${PGDATABASE:railway}
     driver-class-name: org.postgresql.Driver
     username: ${PGUSER:postgres}
     password: ${PGPASSWORD:yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg}
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: 5
+      minimum-idle: 1
       connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      idle-timeout: 300000
+      max-lifetime: 900000
+      # 연결 검증
+      connection-test-query: SELECT 1
 
   jpa:
     hibernate:
-      ddl-auto: update  # Railway에서 스키마 자동 업데이트
-    show-sql: false  # 프로덕션에서는 SQL 로그 비활성화
+      ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
         format_sql: false
@@ -26,28 +32,37 @@ spring:
         jdbc:
           time_zone: Asia/Seoul
     open-in-view: false
+    # 시작 시 DB 연결 지연 (앱 빠른 시작)
+    defer-datasource-initialization: true
 
   jackson:
     time-zone: Asia/Seoul
 
   data:
     redis:
-      # 개별 설정 방식 (Railway 환경변수 사용)
       host: ${REDIS_HOST:interchange.proxy.rlwy.net}
       port: ${REDIS_PORT:19189}
       password: ${REDIS_PASSWORD:EHndhkZGTobgKYkUrgWIhevIpYLQivNy}
       timeout: 60000
       lettuce:
         pool:
-          max-active: 8
-          max-idle: 8
+          max-active: 4
+          max-idle: 2
           min-idle: 0
+        shutdown-timeout: 100ms
+
+  # Quartz 스케줄러 설정 (시작 지연으로 빠른 부팅)
+  quartz:
+    auto-startup: true
+    startup-delay: 60s
+    job-store-type: memory
 
 # 크롤링 설정
 crawler:
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  timeout: 15000  # Railway에서는 타임아웃 늘림
+  timeout: 15000
   retry-count: 3
+  delay-between-requests: 2000
 
 # AI 요약 설정
 ai:
