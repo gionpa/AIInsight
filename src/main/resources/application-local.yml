@@ -1,6 +1,6 @@
-# Local  XΩ $
-# Podman PostgreSQL + Redis ¨©
-# ‰â: ./gradlew bootRun (0¯) î ./gradlew bootRun --args='--spring.profiles.active=local'
+# Local Development Environment Configuration
+# Uses Podman PostgreSQL + Redis
+# Usage: ./gradlew bootRun (default profile) or ./gradlew bootRun --args='--spring.profiles.active=local'
 
 spring:
   datasource:
@@ -15,11 +15,11 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update  # \Ï–î §§» êŸ ≈pt∏
-    show-sql: true  # SQL \¯ ú%
+      ddl-auto: update  # Auto-update schema for development
+    show-sql: true  # Enable SQL logging
     properties:
       hibernate:
-        format_sql: true  # SQL Ï‰
+        format_sql: true  # Format SQL output
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
 
@@ -34,13 +34,13 @@ spring:
           max-idle: 8
           min-idle: 0
 
-# ld¡ $
+# Crawler settings
 crawler:
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   timeout: 10000
   retry-count: 3
 
-# AI î} $
+# AI summarization settings
 ai:
   provider: claude-cli
   openai:
@@ -52,7 +52,7 @@ ai:
   claude-cli:
     timeout: 120
 
-# Swagger UI $ (\Ï–î \1T)
+# Swagger UI settings (enabled for development)
 springdoc:
   swagger-ui:
     enabled: true
