@@ -27,9 +27,7 @@ spring:
 
   data:
     redis:
-      # Railway Redis URL 방식 (우선순위)
-      url: ${REDIS_URL:}
-      # 개별 설정 방식 (fallback)
+      # 개별 설정 방식 (Railway 환경변수 사용)
       host: ${REDIS_HOST:interchange.proxy.rlwy.net}
       port: ${REDIS_PORT:19189}
       password: ${REDIS_PASSWORD:EHndhkZGTobgKYkUrgWIhevIpYLQivNy}
