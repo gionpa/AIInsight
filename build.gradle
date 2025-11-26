@@ -60,23 +60,41 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-// Frontend build tasks
+// Frontend build tasks (조건부 실행)
 task installFrontend(type: Exec) {
     workingDir 'frontend'
     commandLine 'npm', 'install'
+    // Railway 환경에서는 이미 nixpacks가 실행했으므로 skip
+    onlyIf {
+        !file('frontend/dist').exists() &&
+        System.getenv('RAILWAY_ENVIRONMENT') == null
+    }
 }
 
 task buildFrontend(type: Exec) {
     dependsOn installFrontend
     workingDir 'frontend'
     commandLine 'npm', 'run', 'build'
+    // Railway 환경에서는 이미 nixpacks가 실행했으므로 skip
+    onlyIf {
+        !file('frontend/dist').exists() &&
+        System.getenv('RAILWAY_ENVIRONMENT') == null
+    }
 }
 
 task copyFrontend(type: Copy) {
-    dependsOn buildFrontend
+    // buildFrontend는 조건부이므로 의존성 제거
     from 'frontend/dist'
     into 'src/main/resources/static'
+    // frontend/dist가 없으면 skip (Railway에서는 nixpacks가 생성)
+    onlyIf {
+        file('frontend/dist').exists()
+    }
 }
 
 // Build 시 프론트엔드도 함께 빌드
 processResources.dependsOn copyFrontend
+// Railway가 아닌 로컬 환경에서는 buildFrontend 실행
+if (System.getenv('RAILWAY_ENVIRONMENT') == null) {
+    copyFrontend.dependsOn buildFrontend
+}
