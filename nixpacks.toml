@@ -12,8 +12,9 @@ cmds = [
 [phases.build]
 cmds = [
   "cd frontend && npm run build",
-  "export RAILWAY_ENVIRONMENT=production",
-  "./gradlew clean build -x test"
+  "rm -rf src/main/resources/static && mkdir -p src/main/resources/static",
+  "cp -r frontend/dist/* src/main/resources/static/",
+  "./gradlew build -x test -x installFrontend -x buildFrontend -x copyFrontend"
 ]
 
 [start]
