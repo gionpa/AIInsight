@@ -58,6 +58,9 @@ frontend/yarn-error.log*
 frontend/pnpm-debug.log*
 frontend/lerna-debug.log*
 
+# Frontend build copied to resources
+src/main/resources/static/
+
 # Environment variables
 .env
 .env.local

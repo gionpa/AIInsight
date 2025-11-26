@@ -59,3 +59,24 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// Frontend build tasks
+task installFrontend(type: Exec) {
+    workingDir 'frontend'
+    commandLine 'npm', 'install'
+}
+
+task buildFrontend(type: Exec) {
+    dependsOn installFrontend
+    workingDir 'frontend'
+    commandLine 'npm', 'run', 'build'
+}
+
+task copyFrontend(type: Copy) {
+    dependsOn buildFrontend
+    from 'frontend/dist'
+    into 'src/main/resources/static'
+}
+
+// Build 시 프론트엔드도 함께 빌드
+processResources.dependsOn copyFrontend
