@@ -3,10 +3,11 @@ spring:
     name: aiinsight
 
   datasource:
-    url: ${DATABASE_URL}
+    # Railway DATABASE_URL이 있으면 사용, 없으면 개별 설정 사용
+    url: ${DATABASE_URL:jdbc:postgresql://${PGHOST:containers-us-west-110.railway.app}:${PGPORT:7539}/${PGDATABASE:railway}}
     driver-class-name: org.postgresql.Driver
-    username: ${PGUSER}
-    password: ${PGPASSWORD}
+    username: ${PGUSER:postgres}
+    password: ${PGPASSWORD:yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
