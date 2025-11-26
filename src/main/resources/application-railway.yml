@@ -17,7 +17,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate  # Railway에서는 스키마 검증만 수행 (이미 생성됨)
+      ddl-auto: update  # Railway에서 스키마 자동 업데이트
     show-sql: false  # 프로덕션에서는 SQL 로그 비활성화
     properties:
       hibernate:
