@@ -67,3 +67,4 @@ src/main/resources/static/
 .env.development.local
 .env.test.local
 .env.production.local
+src/main/resources/static/
