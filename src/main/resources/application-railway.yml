@@ -1,0 +1,85 @@
+spring:
+  application:
+    name: aiinsight
+
+  profiles:
+    active: railway
+
+  datasource:
+    url: ${DATABASE_URL}
+    driver-class-name: org.postgresql.Driver
+    username: ${PGUSER}
+    password: ${PGPASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Railway에서는 스키마 검증만 수행 (이미 생성됨)
+    show-sql: false  # 프로덕션에서는 SQL 로그 비활성화
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
+  data:
+    redis:
+      # Railway Redis URL 방식 (우선순위)
+      url: ${REDIS_URL:}
+      # 개별 설정 방식 (fallback)
+      host: ${REDIS_HOST:interchange.proxy.rlwy.net}
+      port: ${REDIS_PORT:19189}
+      password: ${REDIS_PASSWORD:EHndhkZGTobgKYkUrgWIhevIpYLQivNy}
+      timeout: 60000
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+# 크롤링 설정
+crawler:
+  user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  timeout: 15000  # Railway에서는 타임아웃 늘림
+  retry-count: 3
+
+# AI 요약 설정
+ai:
+  provider: claude-cli
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    model: gpt-4o-mini
+  claude:
+    api-key: ${CLAUDE_API_KEY:}
+    model: claude-3-haiku-20240307
+  claude-cli:
+    timeout: 180  # Railway에서는 더 긴 타임아웃
+
+# Swagger UI 설정 (프로덕션에서는 비활성화 권장)
+springdoc:
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+    path: /swagger-ui.html
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+    path: /api-docs
+
+server:
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+  http2:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.aiinsight: INFO
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
