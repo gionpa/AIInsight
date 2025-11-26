@@ -1,0 +1,19 @@
+# Nixpacks configuration for Railway
+# Java + Node.js 멀티 런타임 환경
+
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "jdk17"]
+
+[phases.install]
+cmds = [
+  "cd frontend && npm install"
+]
+
+[phases.build]
+cmds = [
+  "cd frontend && npm run build",
+  "./gradlew clean build -x test"
+]
+
+[start]
+cmd = "java -Dserver.port=$PORT -Dspring.profiles.active=railway -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"
