@@ -1,0 +1,332 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getArticles, searchArticles, markArticleAsRead, getArticle } from '../api';
+import type { NewsArticle, ArticleCategory } from '../types';
+import {
+  Search,
+  ExternalLink,
+  Eye,
+  X,
+  Star,
+  Tag,
+} from 'lucide-react';
+
+const categoryLabels: Record<ArticleCategory, string> = {
+  LLM: 'LLM',
+  COMPUTER_VISION: '컴퓨터 비전',
+  NLP: '자연어 처리',
+  ROBOTICS: '로보틱스',
+  ML_OPS: 'MLOps',
+  RESEARCH: '연구',
+  INDUSTRY: '산업',
+  STARTUP: '스타트업',
+  REGULATION: '규제/정책',
+  TUTORIAL: '튜토리얼',
+  PRODUCT: '제품',
+  OTHER: '기타',
+};
+
+const importanceColors = {
+  HIGH: 'bg-red-100 text-red-700',
+  MEDIUM: 'bg-yellow-100 text-yellow-700',
+  LOW: 'bg-gray-100 text-gray-700',
+};
+
+export default function Articles() {
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['articles', page, isSearching ? searchKeyword : ''],
+    queryFn: () =>
+      isSearching && searchKeyword
+        ? searchArticles(searchKeyword, page, 20)
+        : getArticles(page, 20),
+  });
+
+  const { data: articleDetail, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ['article', selectedArticle],
+    queryFn: () => getArticle(selectedArticle!),
+    enabled: selectedArticle !== null,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: markArticleAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['articles'] });
+    },
+  });
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSearching(true);
+    setPage(0);
+  };
+
+  const clearSearch = () => {
+    setSearchKeyword('');
+    setIsSearching(false);
+    setPage(0);
+  };
+
+  const handleViewArticle = (article: NewsArticle) => {
+    setSelectedArticle(article.id);
+    if (article.isNew) {
+      markReadMutation.mutate(article.id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">뉴스 기사</h1>
+
+        {/* Search */}
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              placeholder="키워드 검색..."
+              className="pl-10 pr-4 py-2 border rounded-lg w-64"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          </div>
+          {isSearching && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              초기화
+            </button>
+          )}
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            검색
+          </button>
+        </form>
+      </div>
+
+      {/* Articles Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {data?.content.map((article) => (
+          <div
+            key={article.id}
+            className={`bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow ${
+              article.isNew ? 'ring-2 ring-blue-500' : ''
+            }`}
+          >
+            {article.thumbnailUrl && (
+              <img
+                src={article.thumbnailUrl}
+                alt={article.title}
+                className="w-full h-40 object-cover"
+              />
+            )}
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-medium line-clamp-2 flex-1">{article.title}</h3>
+                {article.isNew && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-500 text-white text-xs rounded">
+                    NEW
+                  </span>
+                )}
+              </div>
+
+              {article.summary && (
+                <p className="text-sm text-gray-600 line-clamp-2 mb-3">
+                  {article.summary}
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2 mb-3">
+                {article.category && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
+                    <Tag className="w-3 h-3" />
+                    {categoryLabels[article.category]}
+                  </span>
+                )}
+                {article.importance && (
+                  <span
+                    className={`px-2 py-0.5 text-xs rounded ${importanceColors[article.importance]}`}
+                  >
+                    {article.importance}
+                  </span>
+                )}
+                {article.relevanceScore !== undefined && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+                    <Star className="w-3 h-3" />
+                    {(article.relevanceScore * 100).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <span>{article.targetName}</span>
+                <span>
+                  {new Date(article.crawledAt).toLocaleString('ko-KR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
+              </div>
+
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => handleViewArticle(article)}
+                  className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                >
+                  <Eye className="w-4 h-4" />
+                  상세보기
+                </button>
+                <a
+                  href={article.originalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  원문
+                </a>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {data?.content.length === 0 && (
+        <div className="text-center py-12 text-gray-500">
+          {isSearching ? '검색 결과가 없습니다.' : '기사가 없습니다.'}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {data && data.totalPages > 1 && (
+        <div className="flex justify-center gap-2 mt-6">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={data.first}
+            className="px-4 py-2 bg-white border rounded-lg disabled:opacity-50"
+          >
+            이전
+          </button>
+          <span className="px-4 py-2 text-gray-600">
+            {data.number + 1} / {data.totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={data.last}
+            className="px-4 py-2 bg-white border rounded-lg disabled:opacity-50"
+          >
+            다음
+          </button>
+        </div>
+      )}
+
+      {/* Article Detail Modal */}
+      {selectedArticle !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white flex justify-between items-center p-4 border-b">
+              <h2 className="text-lg font-semibold">기사 상세</h2>
+              <button
+                onClick={() => setSelectedArticle(null)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {isLoadingDetail ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : articleDetail ? (
+              <div className="p-6">
+                <h1 className="text-2xl font-bold mb-4">{articleDetail.title}</h1>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {articleDetail.category && (
+                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
+                      {categoryLabels[articleDetail.category]}
+                    </span>
+                  )}
+                  {articleDetail.importance && (
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm ${importanceColors[articleDetail.importance]}`}
+                    >
+                      중요도: {articleDetail.importance}
+                    </span>
+                  )}
+                  {articleDetail.relevanceScore !== undefined && (
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                      관련성: {(articleDetail.relevanceScore * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-4 text-sm text-gray-500 mb-6">
+                  <span>출처: {articleDetail.targetName}</span>
+                  {articleDetail.author && <span>작성자: {articleDetail.author}</span>}
+                  {articleDetail.publishedAt && (
+                    <span>게시일: {new Date(articleDetail.publishedAt).toLocaleString('ko-KR', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</span>
+                  )}
+                </div>
+
+                {articleDetail.summary && (
+                  <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h3 className="font-semibold text-blue-800 mb-2">AI 요약</h3>
+                    <p className="text-blue-900">{articleDetail.summary}</p>
+                  </div>
+                )}
+
+                {articleDetail.content && (
+                  <div className="prose max-w-none">
+                    <h3 className="font-semibold mb-2">본문</h3>
+                    <p className="whitespace-pre-wrap text-gray-700">{articleDetail.content}</p>
+                  </div>
+                )}
+
+                <div className="mt-6 pt-4 border-t">
+                  <a
+                    href={articleDetail.originalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    원문 보기
+                  </a>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
