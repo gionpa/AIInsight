@@ -94,6 +94,14 @@ export const getCrawlHistoryByTarget = (targetId: number, page = 0, size = 20) =
 export const getTodayCrawlHistory = () =>
   apiClient.get<CrawlHistory[]>('/crawl-history/today').then((res) => res.data);
 
+export const getAllCrawlHistory = (page = 0, size = 30) =>
+  apiClient
+    .get<Page<CrawlHistory>>('/crawl-history', { params: { page, size } })
+    .then((res) => res.data);
+
+export const deleteOldCrawlHistory = () =>
+  apiClient.delete<{ deletedCount: number }>('/crawl-history/old').then((res) => res.data);
+
 // Crawl Execution
 export const executeCrawl = (targetId: number) =>
   apiClient.post<CrawlResult>(`/crawl/execute/${targetId}`).then((res) => res.data);

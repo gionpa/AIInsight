@@ -43,6 +43,22 @@ public class CrawlHistoryController {
         return ResponseEntity.ok(crawlHistoryService.findTodayHistory());
     }
 
+    @GetMapping
+    @Operation(summary = "전체 크롤링 이력 조회 (페이징)", description = "전체 크롤링 이력을 페이징하여 조회합니다")
+    public ResponseEntity<Page<CrawlHistoryDto.Response>> findAllHistory(
+            @PageableDefault(size = 30) Pageable pageable) {
+        return ResponseEntity.ok(crawlHistoryService.findAllHistory(pageable));
+    }
+
+    @DeleteMapping("/old")
+    @Operation(summary = "한달 이전 이력 삭제", description = "한달이 지난 크롤링 이력을 삭제합니다")
+    public ResponseEntity<DeleteResponse> deleteOldHistory() {
+        long deletedCount = crawlHistoryService.deleteOldHistory();
+        return ResponseEntity.ok(new DeleteResponse(deletedCount));
+    }
+
+    public record DeleteResponse(long deletedCount) {}
+
     @GetMapping("/stats")
     @Operation(summary = "오늘의 크롤링 통계", description = "오늘의 성공/실패 크롤링 횟수를 조회합니다")
     public ResponseEntity<CrawlStatsResponse> getTodayStats() {

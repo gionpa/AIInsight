@@ -41,6 +41,11 @@ public class CrawlHistoryService {
                 .collect(Collectors.toList());
     }
 
+    public Page<CrawlHistoryDto.Response> findAllHistory(Pageable pageable) {
+        return crawlHistoryRepository.findAllByOrderByExecutedAtDesc(pageable)
+                .map(CrawlHistoryDto.Response::from);
+    }
+
     @Transactional
     public CrawlHistory recordSuccess(CrawlTarget target, int articlesFound, int articlesNew, long durationMs) {
         CrawlHistory history = CrawlHistory.builder()
@@ -98,5 +103,16 @@ public class CrawlHistoryService {
     public Long countFailedToday() {
         LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
         return crawlHistoryRepository.countByStatusAfter(CrawlTarget.CrawlStatus.FAILED, startOfDay);
+    }
+
+    @Transactional
+    public long deleteOldHistory() {
+        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+        long count = crawlHistoryRepository.countByExecutedAtBefore(oneMonthAgo);
+        if (count > 0) {
+            crawlHistoryRepository.deleteByExecutedAtBefore(oneMonthAgo);
+            log.info("한달 이전 크롤링 이력 삭제: {}건", count);
+        }
+        return count;
     }
 }

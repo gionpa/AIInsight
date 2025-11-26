@@ -1,31 +1,48 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getTodayCrawlHistory, getAllCrawlTargets, getCrawlHistoryByTarget } from '../api';
-import { CheckCircle, XCircle, AlertCircle, Clock } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAllCrawlHistory, getAllCrawlTargets, getCrawlHistoryByTarget, deleteOldCrawlHistory } from '../api';
+import { CheckCircle, XCircle, AlertCircle, Clock, Trash2 } from 'lucide-react';
 
 export default function CrawlHistory() {
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [page, setPage] = useState(0);
+  const queryClient = useQueryClient();
 
   const { data: targets } = useQuery({
     queryKey: ['crawlTargetsAll'],
     queryFn: getAllCrawlTargets,
   });
 
-  const { data: todayHistory, isLoading: isLoadingToday } = useQuery({
-    queryKey: ['todayCrawlHistory'],
-    queryFn: getTodayCrawlHistory,
+  // 전체 이력 페이징 조회 (기본)
+  const { data: allHistory, isLoading: isLoadingAll } = useQuery({
+    queryKey: ['allCrawlHistory', page],
+    queryFn: () => getAllCrawlHistory(page, 30),
     enabled: selectedTarget === null,
   });
 
+  // 타겟별 이력 조회
   const { data: targetHistory, isLoading: isLoadingTarget } = useQuery({
     queryKey: ['targetCrawlHistory', selectedTarget, page],
-    queryFn: () => getCrawlHistoryByTarget(selectedTarget!, page, 20),
+    queryFn: () => getCrawlHistoryByTarget(selectedTarget!, page, 30),
     enabled: selectedTarget !== null,
   });
 
-  const isLoading = selectedTarget === null ? isLoadingToday : isLoadingTarget;
-  const historyData = selectedTarget === null ? todayHistory : targetHistory?.content;
+  // 한달 이전 이력 삭제
+  const deleteOldMutation = useMutation({
+    mutationFn: deleteOldCrawlHistory,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['allCrawlHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['targetCrawlHistory'] });
+      alert(`${data.deletedCount}건의 이전 이력이 삭제되었습니다.`);
+    },
+    onError: () => {
+      alert('삭제 중 오류가 발생했습니다.');
+    },
+  });
+
+  const isLoading = selectedTarget === null ? isLoadingAll : isLoadingTarget;
+  const pageData = selectedTarget === null ? allHistory : targetHistory;
+  const historyData = pageData?.content;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -58,23 +75,39 @@ export default function CrawlHistory() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">크롤링 이력</h1>
 
-        {/* Target Filter */}
-        <select
-          value={selectedTarget ?? ''}
-          onChange={(e) => {
-            const value = e.target.value;
-            setSelectedTarget(value ? Number(value) : null);
-            setPage(0);
-          }}
-          className="border rounded-lg px-4 py-2"
-        >
-          <option value="">오늘 전체</option>
-          {targets?.map((target) => (
-            <option key={target.id} value={target.id}>
-              {target.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-3 items-center">
+          {/* 한달 이전 삭제 버튼 */}
+          <button
+            onClick={() => {
+              if (confirm('한달이 지난 이력을 삭제하시겠습니까?')) {
+                deleteOldMutation.mutate();
+              }
+            }}
+            disabled={deleteOldMutation.isPending}
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+            한달 이전 삭제
+          </button>
+
+          {/* Target Filter */}
+          <select
+            value={selectedTarget ?? ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedTarget(value ? Number(value) : null);
+              setPage(0);
+            }}
+            className="border rounded-lg px-4 py-2"
+          >
+            <option value="">전체</option>
+            {targets?.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -137,22 +170,22 @@ export default function CrawlHistory() {
             </div>
           )}
 
-          {/* Pagination for target-specific history */}
-          {selectedTarget !== null && targetHistory && targetHistory.totalPages > 1 && (
+          {/* Pagination */}
+          {pageData && pageData.totalPages > 1 && (
             <div className="px-4 py-3 bg-gray-50 flex justify-between items-center">
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={targetHistory.first}
+                disabled={pageData.first}
                 className="px-3 py-1 bg-white border rounded disabled:opacity-50"
               >
                 이전
               </button>
               <span className="text-sm text-gray-500">
-                {targetHistory.number + 1} / {targetHistory.totalPages} 페이지
+                {pageData.number + 1} / {pageData.totalPages} 페이지 (총 {pageData.totalElements}건)
               </span>
               <button
                 onClick={() => setPage((p) => p + 1)}
-                disabled={targetHistory.last}
+                disabled={pageData.last}
                 className="px-3 py-1 bg-white border rounded disabled:opacity-50"
               >
                 다음
