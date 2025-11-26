@@ -4,12 +4,12 @@ import {
   Target,
   Newspaper,
   History,
-  RefreshCw,
   FileText,
+  Zap,
 } from 'lucide-react';
 
 const navItems = [
-  { path: '/', label: '대시보드', icon: LayoutDashboard },
+  { path: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { path: '/report', label: '리포트', icon: FileText },
   { path: '/targets', label: '크롤링 타겟', icon: Target },
   { path: '/articles', label: '뉴스 기사', icon: Newspaper },
@@ -24,11 +24,15 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-64 bg-gray-900 text-white">
         <div className="p-4">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <RefreshCw className="w-6 h-6" />
-            AI Insight
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">AI 뉴스 수집 에이전트</p>
+          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold">AI<span className="text-cyan-400">인사이트</span></h1>
+            </div>
+          </Link>
+          <p className="text-gray-400 text-sm mt-2">AI 뉴스 수집 에이전트</p>
         </div>
         <nav className="mt-4">
           {navItems.map((item) => {

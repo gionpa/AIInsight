@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
 import CrawlTargets from './pages/CrawlTargets'
 import Articles from './pages/Articles'
@@ -10,12 +11,24 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        {/* Landing Page */}
+        <Route path="/" element={<Landing />} />
+
+        {/* App Routes with Layout */}
+        <Route path="/dashboard" element={<Layout />}>
           <Route index element={<Dashboard />} />
-          <Route path="report" element={<Report />} />
-          <Route path="targets" element={<CrawlTargets />} />
-          <Route path="articles" element={<Articles />} />
-          <Route path="history" element={<CrawlHistory />} />
+        </Route>
+        <Route path="/report" element={<Layout />}>
+          <Route index element={<Report />} />
+        </Route>
+        <Route path="/targets" element={<Layout />}>
+          <Route index element={<CrawlTargets />} />
+        </Route>
+        <Route path="/articles" element={<Layout />}>
+          <Route index element={<Articles />} />
+        </Route>
+        <Route path="/history" element={<Layout />}>
+          <Route index element={<CrawlHistory />} />
         </Route>
       </Routes>
     </BrowserRouter>
