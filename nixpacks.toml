@@ -1,43 +1,18 @@
 # Nixpacks configuration for Railway
 # Java + Node.js 멀티 런타임 환경
-# Build cache buster: 20251126-2118-v3
 
 [phases.setup]
-nixPkgs = ["nodejs-18_x", "jdk17", "unzip", "zip"]
+nixPkgs = ["nodejs-18_x", "jdk17"]
 
 [phases.install]
-cmds = [
-  "cd frontend && npm install"
-]
+cmds = ["cd frontend && npm install"]
 
 [phases.build]
 cmds = [
-  # 1. Frontend 빌드
   "cd frontend && npm run build",
-  "echo '=== Frontend build completed ===' && ls -la frontend/dist/",
-
-  # 2. Backend 빌드 (static 복사 skip)
-  "./gradlew clean build -x test -x installFrontend -x buildFrontend -x copyFrontend",
-  "echo '=== Backend build completed ===' && ls -la build/libs/",
-
-  # 3. JAR 압축 해제
-  "mkdir -p build/extracted",
-  "cd build/extracted && unzip -q ../libs/aiinsight-0.0.1-SNAPSHOT.jar",
-  "echo '=== JAR extracted ===' && ls -la build/extracted/BOOT-INF/classes/",
-
-  # 4. static 폴더 생성 및 frontend 복사
-  "mkdir -p build/extracted/BOOT-INF/classes/static",
-  "cp -r frontend/dist/* build/extracted/BOOT-INF/classes/static/",
-  "echo '=== Static files copied ===' && ls -la build/extracted/BOOT-INF/classes/static/",
-
-  # 5. JAR 재압축 (zip 사용 - 매니페스트 보존)
-  "rm build/libs/aiinsight-0.0.1-SNAPSHOT.jar",
-  "cd build/extracted && zip -qr ../libs/aiinsight-0.0.1-SNAPSHOT.jar .",
-  "echo '=== JAR repacked ===' && ls -la build/libs/",
-
-  # 6. 검증 - 매니페스트 및 static 파일 확인
-  "echo '=== Verifying MANIFEST ===' && unzip -p build/libs/aiinsight-0.0.1-SNAPSHOT.jar META-INF/MANIFEST.MF | head -10",
-  "echo '=== Verifying static files ===' && unzip -l build/libs/aiinsight-0.0.1-SNAPSHOT.jar | grep -E 'static/(index|assets)' | head -20"
+  "mkdir -p src/main/resources/static",
+  "cp -r frontend/dist/* src/main/resources/static/",
+  "./gradlew clean build -x test -x installFrontend -x buildFrontend -x copyFrontend"
 ]
 
 [start]
