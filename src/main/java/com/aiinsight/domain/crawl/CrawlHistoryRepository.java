@@ -17,7 +17,7 @@ public interface CrawlHistoryRepository extends JpaRepository<CrawlHistory, Long
 
     Optional<CrawlHistory> findTopByTargetIdOrderByExecutedAtDesc(Long targetId);
 
-    List<CrawlHistory> findByExecutedAtAfter(LocalDateTime dateTime);
+    List<CrawlHistory> findByExecutedAtAfterOrderByExecutedAtDesc(LocalDateTime dateTime);
 
     @Query("SELECT ch FROM CrawlHistory ch WHERE ch.target.id = :targetId AND ch.executedAt >= :startDate ORDER BY ch.executedAt DESC")
     List<CrawlHistory> findRecentByTargetId(Long targetId, LocalDateTime startDate);

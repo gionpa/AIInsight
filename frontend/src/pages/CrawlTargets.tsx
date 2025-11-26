@@ -175,14 +175,14 @@ export default function CrawlTargets() {
                     <button
                       onClick={() => executeMutation.mutate(target.id)}
                       disabled={executeMutation.isPending}
-                      className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      className="p-1 text-green-600 hover:bg-green-50 rounded cursor-pointer"
                       title="크롤링 실행"
                     >
                       <Play className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => toggleMutation.mutate(target.id)}
-                      className="p-1 text-yellow-600 hover:bg-yellow-50 rounded"
+                      className="p-1 text-yellow-600 hover:bg-yellow-50 rounded cursor-pointer"
                       title={target.enabled ? '비활성화' : '활성화'}
                     >
                       <Power className="w-5 h-5" />
@@ -192,14 +192,14 @@ export default function CrawlTargets() {
                         setEditingTarget(target);
                         setIsModalOpen(true);
                       }}
-                      className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                      className="p-1 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
                       title="수정"
                     >
                       <Edit className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => handleDelete(target)}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
                       title="삭제"
                     >
                       <Trash2 className="w-5 h-5" />

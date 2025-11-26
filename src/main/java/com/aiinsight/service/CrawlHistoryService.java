@@ -36,7 +36,7 @@ public class CrawlHistoryService {
 
     public List<CrawlHistoryDto.Response> findTodayHistory() {
         LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
-        return crawlHistoryRepository.findByExecutedAtAfter(startOfDay).stream()
+        return crawlHistoryRepository.findByExecutedAtAfterOrderByExecutedAtDesc(startOfDay).stream()
                 .map(CrawlHistoryDto.Response::from)
                 .collect(Collectors.toList());
     }

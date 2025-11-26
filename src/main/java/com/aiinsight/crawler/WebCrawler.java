@@ -78,6 +78,17 @@ public class WebCrawler {
                 .userAgent(crawlerConfig.getUserAgent())
                 .timeout(crawlerConfig.getTimeout())
                 .followRedirects(true)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9,ko;q=0.8")
+                .header("Accept-Encoding", "gzip, deflate")
+                .header("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
+                .header("sec-ch-ua-mobile", "?0")
+                .header("sec-ch-ua-platform", "\"macOS\"")
+                .header("sec-fetch-dest", "document")
+                .header("sec-fetch-mode", "navigate")
+                .header("sec-fetch-site", "none")
+                .header("sec-fetch-user", "?1")
+                .header("upgrade-insecure-requests", "1")
                 .get();
     }
 
@@ -94,6 +105,8 @@ public class WebCrawler {
             articleElements = listContainer.select(config.getArticleItemSelector());
         } else if (config.getArticleItemSelector() != null) {
             articleElements = doc.select(config.getArticleItemSelector());
+            log.debug("선택자 '{}' 로 {} 개의 요소를 찾았습니다",
+                    config.getArticleItemSelector(), articleElements.size());
         } else {
             log.warn("기사 아이템 선택자가 설정되지 않았습니다");
             return articles;

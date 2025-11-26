@@ -4,7 +4,7 @@
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/aiinsight
+    url: jdbc:postgresql://localhost:5433/aiinsight
     driver-class-name: org.postgresql.Driver
     username: aiinsight
     password: aiinsight123
@@ -21,12 +21,17 @@ spring:
       hibernate:
         format_sql: true  # Format SQL output
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Seoul
     open-in-view: false
+
+  jackson:
+    time-zone: Asia/Seoul
 
   data:
     redis:
       host: localhost
-      port: 6379
+      port: 6380
       timeout: 30000
       lettuce:
         pool:

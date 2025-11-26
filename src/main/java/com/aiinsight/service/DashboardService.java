@@ -54,8 +54,9 @@ public class DashboardService {
             }
         }
 
-        // 최근 크롤링 기록
-        List<DashboardDto.RecentCrawl> recentCrawls = crawlHistoryRepository.findByExecutedAtAfter(startOfDay)
+        // 최근 크롤링 기록 (최근 24시간)
+        LocalDateTime last24Hours = LocalDateTime.now().minusHours(24);
+        List<DashboardDto.RecentCrawl> recentCrawls = crawlHistoryRepository.findByExecutedAtAfterOrderByExecutedAtDesc(last24Hours)
                 .stream()
                 .limit(10)
                 .map(h -> DashboardDto.RecentCrawl.builder()
@@ -63,7 +64,7 @@ public class DashboardService {
                         .targetName(h.getTarget().getName())
                         .status(h.getStatus().name())
                         .articlesNew(h.getArticlesNew())
-                        .executedAt(h.getExecutedAt().format(DateTimeFormatter.ofPattern("HH:mm:ss")))
+                        .executedAt(h.getExecutedAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")))
                         .build())
                 .collect(Collectors.toList());
 
