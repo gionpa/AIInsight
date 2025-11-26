@@ -3,10 +3,10 @@ spring:
     name: aiinsight
 
   datasource:
-    # Railway DATABASE_URL 직접 사용 (jdbc: 접두사 필요)
-    # DATABASE_URL 형식: postgresql://user:pass@host:port/db
-    # Spring 형식: jdbc:postgresql://host:port/db
-    url: jdbc:${DATABASE_URL:postgresql://postgres:yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg@yamanote.proxy.rlwy.net:51273/railway}
+    # Railway 외부 프록시 직접 설정 (환경변수 오버라이드 가능)
+    url: jdbc:postgresql://yamanote.proxy.rlwy.net:51273/railway
+    username: postgres
+    password: yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 5
