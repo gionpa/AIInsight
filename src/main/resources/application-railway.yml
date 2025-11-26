@@ -3,11 +3,11 @@ spring:
     name: aiinsight
 
   datasource:
-    # Railway 환경변수 사용 (내부 네트워크)
-    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
+    # Railway DATABASE_URL 직접 사용 (jdbc: 접두사 필요)
+    # DATABASE_URL 형식: postgresql://user:pass@host:port/db
+    # Spring 형식: jdbc:postgresql://host:port/db
+    url: jdbc:${DATABASE_URL:postgresql://postgres:yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg@yamanote.proxy.rlwy.net:51273/railway}
     driver-class-name: org.postgresql.Driver
-    username: ${PGUSER}
-    password: ${PGPASSWORD}
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
@@ -34,9 +34,8 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
-      password: ${REDIS_PASSWORD}
+      # REDIS_URL 형식: redis://default:password@host:port
+      url: ${REDIS_URL:redis://default:EHndhkZGTobgKYkUrgWIhevIpYLQivNy@interchange.proxy.rlwy.net:19189}
       timeout: 60000
       lettuce:
         pool:
