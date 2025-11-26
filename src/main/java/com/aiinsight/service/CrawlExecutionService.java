@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class CrawlExecutionService {
 
+    private static final int MAX_RETRY_COUNT = 2;
+    private static final long RETRY_DELAY_MS = 60000; // 1분
+
     private final WebCrawler webCrawler;
     private final CrawlTargetService crawlTargetService;
     private final NewsArticleService newsArticleService;
@@ -22,11 +25,39 @@ public class CrawlExecutionService {
     @Transactional
     public CrawlResult executeCrawl(Long targetId) {
         CrawlTarget target = crawlTargetService.findEntityById(targetId);
-        return executeCrawl(target);
+        return executeCrawlWithRetry(target);
     }
 
     @Transactional
     public CrawlResult executeCrawl(CrawlTarget target) {
+        return executeCrawlWithRetry(target);
+    }
+
+    private CrawlResult executeCrawlWithRetry(CrawlTarget target) {
+        CrawlResult result = doExecuteCrawl(target);
+
+        // 실패 시 재시도
+        int retryCount = 0;
+        while (!result.isSuccess() && retryCount < MAX_RETRY_COUNT) {
+            retryCount++;
+            log.info("크롤링 재시도 예정: {} ({}번째, 1분 후)", target.getName(), retryCount);
+
+            try {
+                Thread.sleep(RETRY_DELAY_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("재시도 대기 중 인터럽트 발생");
+                break;
+            }
+
+            log.info("크롤링 재시도 시작: {} ({}번째)", target.getName(), retryCount);
+            result = doExecuteCrawl(target);
+        }
+
+        return result;
+    }
+
+    private CrawlResult doExecuteCrawl(CrawlTarget target) {
         log.info("크롤링 시작: {} ({})", target.getName(), target.getUrl());
 
         CrawlResult result = webCrawler.crawl(target);
@@ -76,7 +107,7 @@ public class CrawlExecutionService {
 
         for (CrawlTarget target : crawlTargetService.findEnabledTargets()) {
             try {
-                executeCrawl(target);
+                executeCrawlWithRetry(target);
 
                 // 요청 간 딜레이
                 Thread.sleep(2000);
