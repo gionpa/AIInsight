@@ -2,8 +2,8 @@
 numReplicas = 1
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-# liveness probe - DB/Redis 연결 상태와 무관하게 앱 생존만 확인
-healthcheckPath = "/actuator/health/liveness"
+# 기본 health check (DB/Redis 제외)
+healthcheckPath = "/actuator/health"
 healthcheckTimeout = 300
-# JVM 최적화: 빠른 시작, 메모리 제한, 서버 최적화
-startCommand = "java -Xms128m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=production -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"
+# JVM 최적화 + railway 프로필 사용
+startCommand = "java -Xms128m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=railway -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"

@@ -17,4 +17,4 @@ cmds = [
 ]
 
 [start]
-cmd = "java -Dspring.profiles.active=production -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"
+cmd = "java -Xms128m -Xmx384m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=railway -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"
