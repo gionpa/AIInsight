@@ -12,9 +12,10 @@ cmds = [
 [phases.build]
 cmds = [
   "cd frontend && npm run build",
-  "rm -rf src/main/resources/static && mkdir -p src/main/resources/static",
-  "cp -r frontend/dist/* src/main/resources/static/",
-  "./gradlew build -x test -x installFrontend -x buildFrontend -x copyFrontend"
+  "./gradlew clean build -x test -x installFrontend -x buildFrontend -x copyFrontend",
+  "mkdir -p build/resources/main/static",
+  "cp -r frontend/dist/* build/resources/main/static/",
+  "cd build/libs && jar uf aiinsight-0.0.1-SNAPSHOT.jar -C ../resources/main static"
 ]
 
 [start]
