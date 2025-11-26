@@ -2,9 +2,6 @@ spring:
   application:
     name: aiinsight
 
-  profiles:
-    active: railway
-
   datasource:
     url: ${DATABASE_URL}
     driver-class-name: org.postgresql.Driver
