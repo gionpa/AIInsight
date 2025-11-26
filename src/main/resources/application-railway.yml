@@ -34,8 +34,10 @@ spring:
 
   data:
     redis:
-      # REDIS_URL 형식: redis://default:password@host:port
-      url: ${REDIS_URL:redis://default:EHndhkZGTobgKYkUrgWIhevIpYLQivNy@interchange.proxy.rlwy.net:19189}
+      # 개별 설정 (host/port/password)
+      host: ${REDIS_HOST:interchange.proxy.rlwy.net}
+      port: ${REDIS_PORT:19189}
+      password: ${REDIS_PASSWORD:EHndhkZGTobgKYkUrgWIhevIpYLQivNy}
       timeout: 60000
       lettuce:
         pool:
@@ -43,6 +45,9 @@ spring:
           max-idle: 2
           min-idle: 0
         shutdown-timeout: 100ms
+      # Redis Repository 비활성화 (JPA만 사용)
+      repositories:
+        enabled: false
 
   # Quartz 스케줄러 설정 (시작 지연으로 빠른 부팅)
   quartz:
