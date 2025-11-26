@@ -1,5 +1,6 @@
 # Nixpacks configuration for Railway
 # Java + Node.js 멀티 런타임 환경
+# Build cache buster: 20251126-2116-v2
 
 [phases.setup]
 nixPkgs = ["nodejs-18_x", "jdk17", "unzip"]

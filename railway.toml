@@ -1,3 +1,7 @@
+[build]
+# nixpacks 빌더 사용
+builder = "nixpacks"
+
 [deploy]
 numReplicas = 1
 restartPolicyType = "ON_FAILURE"
