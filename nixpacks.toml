@@ -2,7 +2,7 @@
 # Java + Node.js 멀티 런타임 환경
 
 [phases.setup]
-nixPkgs = ["nodejs-18_x", "jdk17"]
+nixPkgs = ["nodejs-18_x", "jdk17", "unzip"]
 
 [phases.install]
 cmds = [
@@ -11,11 +11,31 @@ cmds = [
 
 [phases.build]
 cmds = [
+  # 1. Frontend 빌드
   "cd frontend && npm run build",
+  "echo '=== Frontend build completed ===' && ls -la frontend/dist/",
+
+  # 2. Backend 빌드 (static 복사 skip)
   "./gradlew clean build -x test -x installFrontend -x buildFrontend -x copyFrontend",
-  "mkdir -p build/jar-update/BOOT-INF/classes/static",
-  "cp -r frontend/dist/* build/jar-update/BOOT-INF/classes/static/",
-  "cd build/libs && jar uf aiinsight-0.0.1-SNAPSHOT.jar -C ../jar-update BOOT-INF"
+  "echo '=== Backend build completed ===' && ls -la build/libs/",
+
+  # 3. JAR 압축 해제
+  "mkdir -p build/extracted",
+  "cd build/extracted && unzip -q ../libs/aiinsight-0.0.1-SNAPSHOT.jar",
+  "echo '=== JAR extracted ===' && ls -la build/extracted/BOOT-INF/classes/",
+
+  # 4. static 폴더 생성 및 frontend 복사
+  "mkdir -p build/extracted/BOOT-INF/classes/static",
+  "cp -r frontend/dist/* build/extracted/BOOT-INF/classes/static/",
+  "echo '=== Static files copied ===' && ls -la build/extracted/BOOT-INF/classes/static/",
+
+  # 5. JAR 재압축
+  "rm build/libs/aiinsight-0.0.1-SNAPSHOT.jar",
+  "cd build/extracted && jar cf ../libs/aiinsight-0.0.1-SNAPSHOT.jar .",
+  "echo '=== JAR repacked ===' && ls -la build/libs/",
+
+  # 6. 검증 - static 파일 확인
+  "echo '=== Verifying JAR contents ===' && unzip -l build/libs/aiinsight-0.0.1-SNAPSHOT.jar | grep -E 'static/(index|assets)' | head -20"
 ]
 
 [start]
