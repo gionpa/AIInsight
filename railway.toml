@@ -2,6 +2,8 @@
 numReplicas = 1
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-healthcheckPath = "/actuator/health"
+# liveness probe는 DB/Redis 연결 상태와 무관하게 앱 생존만 확인
+healthcheckPath = "/actuator/health/liveness"
 healthcheckTimeout = 300
-startCommand = "java -Dspring.profiles.active=production -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"
+# 메모리 제한 및 JVM 최적화
+startCommand = "java -Xms256m -Xmx512m -Dspring.profiles.active=production -jar build/libs/aiinsight-0.0.1-SNAPSHOT.jar"

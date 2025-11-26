@@ -90,15 +90,30 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,readiness,liveness
       base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
       probes:
         enabled: true
+      group:
+        # liveness는 앱이 살아있는지만 확인 (DB/Redis 무시)
+        liveness:
+          include: ping
+          show-details: always
+        # readiness는 DB/Redis 포함
+        readiness:
+          include: db,redis,ping
+          show-details: always
   health:
+    # 기본 health check에서는 DB/Redis를 비활성화하여 빠른 응답
     db:
-      enabled: true
+      enabled: false
     redis:
+      enabled: false
+    # liveness/readiness probe만 사용
+    livenessState:
+      enabled: true
+    readinessState:
       enabled: true
