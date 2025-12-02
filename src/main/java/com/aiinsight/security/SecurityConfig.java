@@ -86,12 +86,15 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:5173",
                 "http://localhost:3000",
+                "https://aiinsight-production.up.railway.app",
                 frontendUrl
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
+        // Expose headers for static resources with crossorigin attribute
+        configuration.setExposedHeaders(List.of("*"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
