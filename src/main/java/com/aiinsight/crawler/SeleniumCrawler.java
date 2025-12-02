@@ -95,12 +95,24 @@ public class SeleniumCrawler {
     private WebDriver createDriver() {
         ChromeOptions options = new ChromeOptions();
 
+        // Docker/Railway 환경에서 Chrome 바이너리 경로 설정
+        String chromeBinary = System.getenv("CHROME_BIN");
+        if (chromeBinary != null && !chromeBinary.isEmpty()) {
+            log.info("Chrome 바이너리 경로 설정: {}", chromeBinary);
+            options.setBinary(chromeBinary);
+        }
+
         // Headless 모드 설정
         options.addArguments("--headless=new");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--disable-gpu");
         options.addArguments("--window-size=1920,1080");
+
+        // Docker 환경 추가 설정
+        options.addArguments("--disable-setuid-sandbox");
+        options.addArguments("--single-process");
+        options.addArguments("--remote-debugging-port=9222");
 
         // 봇 감지 우회를 위한 설정
         options.addArguments("--disable-blink-features=AutomationControlled");

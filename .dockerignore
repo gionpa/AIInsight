@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Build outputs
+build/
+!build/libs/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Gradle
+.gradle/
+
+# Node modules (frontend는 dist만 필요)
+frontend/node_modules/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+
+# 로컬 설정
+*.local
+.env.local
+
+# 테스트
+src/test/
+*.test.js
+*.spec.js
+
+# 문서
+*.md
+!README.md
+
+# 기타
+.DS_Store
+Thumbs.db
