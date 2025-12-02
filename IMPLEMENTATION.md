@@ -406,8 +406,286 @@ This project is private and proprietary.
 
 ## 변경 이력
 
+### 2025-12-02
+- ✅ 뉴스 기사 중요도 필터링 기능 추가
+- ✅ 메타데이터 추출 정규식 보강 (og:title, og:description)
+- ✅ 기사 원문 자동 업데이트 로직 추가
+- ✅ 일반적인 제목 감지 기능 추가 (isGenericTitle)
+
 ### 2025-11-26
 - ✅ 한글 제목 번역 기능 구현 (titleKo)
 - ✅ 날짜 및 시간 정보 표시 추가
 - ✅ Git 저장소 초기화 및 커밋
 - ✅ 구현 문서 작성
+
+---
+
+## AI 기사 분석 시스템 상세 스펙
+
+### 개요
+
+AI 기사 분석 시스템은 수집된 뉴스 기사에 대해 다음 작업을 자동으로 수행합니다:
+1. **메타데이터 추출**: URL에서 og:title, og:description 등 추출
+2. **한글 제목 번역**: 영어 제목을 자연스러운 한국어로 번역
+3. **내용 요약**: 기사 핵심 내용을 3-5문장으로 요약
+4. **카테고리 분류**: AI 관련 12개 카테고리로 자동 분류
+5. **중요도 평가**: HIGH/MEDIUM/LOW 3단계 중요도 판정
+6. **관련성 점수**: AI 분야와의 관련도 0.0~1.0 점수 부여
+
+### 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      AiSummaryService.java                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │ 메타데이터    │ → │ AI 분석      │ → │ 결과 저장    │       │
+│  │ 추출         │    │ (Claude CLI) │    │ (DB)        │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│         │                   │                   │                │
+│         ▼                   ▼                   ▼                │
+│  fetchMetadataFromUrl() → callClaudeCli() → updateSummary()     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 메타데이터 추출 시스템
+
+#### 1. URL 메타데이터 추출 (`fetchMetadataFromUrl`)
+
+기사 URL에서 OpenGraph 메타데이터를 추출합니다.
+
+**추출 우선순위**:
+1. `og:title` (OpenGraph 제목)
+2. `og:description` (OpenGraph 설명)
+3. `<title>` 태그 (폴백)
+4. `name="description"` 메타 태그 (폴백)
+
+**정규식 패턴** (속성 순서 무관):
+```java
+// 패턴 1: property="og:title" content="..."
+Pattern.compile("<meta\\s+property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']")
+
+// 패턴 2: content="..." property="og:title"
+Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+property=[\"']og:title[\"']")
+```
+
+**HTML 엔티티 디코딩**:
+- `&amp;` → `&`
+- `&lt;` → `<`
+- `&gt;` → `>`
+- `&quot;` → `"`
+- `&#39;`, `&apos;`, `&#x27;` → `'`
+- `&hellip;` → `...`
+- `&nbsp;` → ` `
+
+#### 2. 일반적인 제목 감지 (`isGenericTitle`)
+
+의미 없는 제목을 감지하여 메타데이터 재추출을 트리거합니다.
+
+**감지 패턴**:
+```java
+String[] genericPatterns = {
+    "기사 상세", "기사 보기", "상세 보기",
+    "article view", "article detail", "view article",
+    "untitled", "no title", "제목 없음",
+    "loading", "로딩"
+};
+```
+
+**추가 조건**:
+- 제목 길이 5자 미만
+
+#### 3. URL 경로에서 제목 추출 (`extractTitleFromUrl`)
+
+메타데이터 추출 실패 시 URL 경로에서 제목을 추측합니다.
+
+```
+https://example.com/news/ai-breakthrough-2025
+→ "Ai breakthrough 2025"
+```
+
+**처리 과정**:
+1. 쿼리 파라미터 제거 (`?` 이후)
+2. 마지막 경로 세그먼트 추출
+3. 확장자 제거 (`.html`, `.php` 등)
+4. 하이픈/언더스코어를 공백으로 변환
+5. 긴 숫자 제거 (날짜 등)
+6. 첫 글자 대문자화
+
+### AI 분석 프로세스
+
+#### 1. 분석 트리거 조건
+
+```java
+public void summarizeArticle(NewsArticle article, boolean forceReanalyze) {
+    // 이미 분석된 경우 스킵 (force가 아닌 경우)
+    if (!forceReanalyze && article.getIsSummarized()) {
+        return;
+    }
+    // ...
+}
+```
+
+#### 2. 제목/본문 보강 로직
+
+```java
+// 제목이 없거나 일반적인 제목인 경우
+boolean needMetadataFetch = (title == null || title.isEmpty() || isGenericTitle(title));
+
+if (needMetadataFetch && url != null) {
+    String[] metadata = fetchMetadataFromUrl(url);
+    if (metadata[0] != null && !metadata[0].isEmpty()) {
+        article.setTitle(metadata[0]);  // 원본 기사 제목 업데이트
+        title = metadata[0];
+    }
+    if (metadata[1] != null && !metadata[1].isEmpty() && content.isEmpty()) {
+        article.setContent(metadata[1]);  // 원본 기사 본문 업데이트
+        content = metadata[1];
+    }
+}
+```
+
+#### 3. AI 프롬프트 구조
+
+```java
+private static final String SUMMARY_PROMPT = """
+    다음 기사를 분석하여 JSON 형식으로 응답해주세요.
+
+    기사 제목: %s
+    기사 내용: %s
+
+    응답 형식:
+    {
+        "titleKo": "한글 제목 번역",
+        "summary": "3-5문장 한국어 요약",
+        "relevanceScore": 0.0-1.0,
+        "category": "LLM|COMPUTER_VISION|NLP|...",
+        "importance": "HIGH|MEDIUM|LOW"
+    }
+
+    필수 주의사항:
+    - 외부 URL 접근 없이 제공된 제목과 내용만 사용
+    - titleKo는 원문 제목을 자연스러운 한국어로 번역
+    - summary는 한국어로 작성
+    - 반드시 JSON 형식으로만 응답
+    """;
+```
+
+#### 4. AI Provider 설정
+
+**로컬 환경** (Claude CLI):
+```yaml
+ai:
+  provider: claude-cli
+  claude-cli:
+    timeout: 180
+```
+
+**Railway 환경** (Claude API):
+```yaml
+ai:
+  provider: claude
+  claude:
+    api-key: ${CLAUDE_API_KEY}
+    model: claude-3-haiku-20240307
+```
+
+### API 엔드포인트
+
+#### 단일 기사 분석
+```http
+POST /api/articles/{id}/analyze?force=false
+```
+- `force=true`: 이미 분석된 기사도 재분석
+
+#### 배치 분석
+```http
+POST /api/articles/analyze-batch?limit=10
+```
+- 미분석 기사 일괄 처리
+- API rate limit 방지를 위한 1초 딜레이
+
+#### 중요도별 필터링
+```http
+GET /api/articles/importance/{importance}?page=0&size=20
+```
+- `importance`: HIGH, MEDIUM, LOW
+
+### 프론트엔드 통합
+
+#### 중요도 필터 UI (Articles.tsx)
+
+```tsx
+const [importanceFilter, setImportanceFilter] = useState<ArticleImportance | 'ALL'>('ALL');
+
+const { data } = useQuery({
+    queryKey: ['articles', page, importanceFilter],
+    queryFn: () => {
+        if (importanceFilter !== 'ALL') {
+            return getArticlesByImportance(importanceFilter, page, 20);
+        }
+        return getArticles(page, 20);
+    },
+});
+```
+
+#### 필터 버튼 스타일
+```tsx
+{(['ALL', 'HIGH', 'MEDIUM', 'LOW'] as const).map((level) => (
+    <button
+        className={`px-3 py-1.5 text-sm rounded-lg ${
+            importanceFilter === level
+                ? level === 'HIGH' ? 'bg-red-600 text-white'
+                : level === 'MEDIUM' ? 'bg-yellow-500 text-white'
+                : level === 'LOW' ? 'bg-gray-600 text-white'
+                : 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700'
+        }`}
+    >
+        {level === 'ALL' ? '전체' : level === 'HIGH' ? '높음' : level === 'MEDIUM' ? '보통' : '낮음'}
+    </button>
+))}
+```
+
+### 에러 처리
+
+#### 메타데이터 추출 실패
+```java
+try {
+    // HTTP 요청 및 파싱
+} catch (Exception e) {
+    log.warn("URL 메타데이터 가져오기 실패: {} - {}", urlStr, e.getMessage());
+    return new String[2];  // 빈 배열 반환
+}
+```
+
+#### AI 분석 실패
+```java
+try {
+    String response = callClaudeCli(prompt);
+    // JSON 파싱 및 저장
+} catch (Exception e) {
+    log.error("AI 요약 생성 실패: {} - {}", article.getId(), e.getMessage());
+    // 실패해도 다음 기사 계속 처리
+}
+```
+
+### 성능 최적화
+
+1. **본문 길이 제한**: 3000자 초과 시 truncate (토큰 절약)
+2. **HEAD 태그 조기 종료**: `</head>` 발견 시 HTML 파싱 중단
+3. **배치 처리**: 한 번에 여러 기사 분석 (rate limit 고려)
+4. **캐싱**: 분석 완료 플래그(`isSummarized`)로 중복 분석 방지
+
+### 관련 파일
+
+| 파일 | 설명 |
+|------|------|
+| `AiSummaryService.java` | AI 분석 핵심 로직 |
+| `NewsArticleService.java` | 기사 CRUD 및 업데이트 |
+| `NewsArticleController.java` | REST API 엔드포인트 |
+| `Articles.tsx` | 프론트엔드 기사 목록 및 필터 |
+| `api/index.ts` | API 클라이언트 함수 |
+| `types/index.ts` | TypeScript 타입 정의 |

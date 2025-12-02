@@ -98,40 +98,45 @@ public class AiSummaryService {
         String content = article.getContent();
         String url = article.getOriginalUrl();
 
-        // 제목이 없는 경우 URL에서 정보 추출 시도
+        // 제목이 없거나 일반적인 제목인 경우 URL에서 정보 추출 시도
+        boolean needMetadataFetch = (title == null || title.isEmpty() || isGenericTitle(title));
+        String[] metadata = null;
+
+        if (needMetadataFetch && url != null && !url.isEmpty()) {
+            metadata = fetchMetadataFromUrl(url);
+            if (metadata[0] != null && !metadata[0].isEmpty()) {
+                // 원본 기사의 title도 업데이트
+                article.setTitle(metadata[0]);
+                title = metadata[0];
+                log.info("URL 메타데이터에서 제목 추출 및 업데이트: {} -> {}", url, title);
+            }
+            if (metadata[1] != null && !metadata[1].isEmpty() && (content == null || content.isEmpty())) {
+                // 원본 기사의 content도 업데이트 (없는 경우에만)
+                article.setContent(metadata[1]);
+                content = metadata[1];
+                log.info("URL 메타데이터에서 설명 추출 및 업데이트: {}", url);
+            }
+        }
+
+        // 제목이 여전히 없는 경우
         if (title == null || title.isEmpty()) {
             if (url != null && !url.isEmpty()) {
-                // URL에서 메타데이터(og:title, og:description) 가져오기 시도
-                String[] metadata = fetchMetadataFromUrl(url);
-                if (metadata[0] != null && !metadata[0].isEmpty()) {
-                    title = metadata[0];
-                    if (content == null || content.isEmpty()) {
-                        content = metadata[1] != null ? metadata[1] : title;
-                    }
-                    log.info("URL 메타데이터에서 제목 추출: {} -> {}", url, title);
-                } else {
-                    // 메타데이터 실패 시 URL 경로에서 제목 추측
-                    title = extractTitleFromUrl(url);
-                    log.info("URL 경로에서 제목 추출: {} -> {}", url, title);
-                }
+                // URL 경로에서 제목 추측
+                title = extractTitleFromUrl(url);
+                article.setTitle(title);
+                log.info("URL 경로에서 제목 추출: {} -> {}", url, title);
             } else {
                 log.warn("분석할 내용이 없는 기사: {}", article.getId());
                 return;
             }
         }
 
-        // 본문이 없는 경우에도 URL에서 설명 추출 시도
+        // 본문이 없는 경우 메타데이터 재사용 또는 제목 사용
         if (content == null || content.isEmpty()) {
-            if (url != null && !url.isEmpty()) {
-                String[] metadata = fetchMetadataFromUrl(url);
-                if (metadata[1] != null && !metadata[1].isEmpty()) {
-                    content = metadata[1];
-                    log.info("URL 메타데이터에서 설명 추출: {}", url);
-                } else {
-                    content = title; // 본문이 없으면 제목 사용
-                }
+            if (metadata != null && metadata[1] != null && !metadata[1].isEmpty()) {
+                content = metadata[1];
             } else {
-                content = title;
+                content = title; // 본문이 없으면 제목 사용
             }
         }
 
@@ -377,18 +382,45 @@ public class AiSummaryService {
 
             String htmlStr = html.toString();
 
-            // og:title 추출
-            Pattern ogTitlePattern = Pattern.compile("<meta\\s+property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-            Matcher ogTitleMatcher = ogTitlePattern.matcher(htmlStr);
-            if (ogTitleMatcher.find()) {
-                result[0] = decodeHtmlEntities(ogTitleMatcher.group(1));
+            // og:title 추출 (property와 content 속성 순서가 바뀔 수 있음)
+            // 패턴 1: property="og:title" content="..."
+            Pattern ogTitlePattern1 = Pattern.compile("<meta\\s+property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+            // 패턴 2: content="..." property="og:title"
+            Pattern ogTitlePattern2 = Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+property=[\"']og:title[\"']", Pattern.CASE_INSENSITIVE);
+
+            Matcher ogTitleMatcher1 = ogTitlePattern1.matcher(htmlStr);
+            Matcher ogTitleMatcher2 = ogTitlePattern2.matcher(htmlStr);
+            if (ogTitleMatcher1.find()) {
+                result[0] = decodeHtmlEntities(ogTitleMatcher1.group(1));
+            } else if (ogTitleMatcher2.find()) {
+                result[0] = decodeHtmlEntities(ogTitleMatcher2.group(1));
             }
 
-            // og:description 추출
-            Pattern ogDescPattern = Pattern.compile("<meta\\s+property=[\"']og:description[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-            Matcher ogDescMatcher = ogDescPattern.matcher(htmlStr);
-            if (ogDescMatcher.find()) {
-                result[1] = decodeHtmlEntities(ogDescMatcher.group(1));
+            // og:description 추출 (property와 content 속성 순서가 바뀔 수 있음)
+            // 패턴 1: property="og:description" content="..."
+            Pattern ogDescPattern1 = Pattern.compile("<meta\\s+property=[\"']og:description[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+            // 패턴 2: content="..." property="og:description"
+            Pattern ogDescPattern2 = Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+property=[\"']og:description[\"']", Pattern.CASE_INSENSITIVE);
+
+            Matcher ogDescMatcher1 = ogDescPattern1.matcher(htmlStr);
+            Matcher ogDescMatcher2 = ogDescPattern2.matcher(htmlStr);
+            if (ogDescMatcher1.find()) {
+                result[1] = decodeHtmlEntities(ogDescMatcher1.group(1));
+            } else if (ogDescMatcher2.find()) {
+                result[1] = decodeHtmlEntities(ogDescMatcher2.group(1));
+            }
+
+            // name="description" 메타 태그도 시도 (og:description이 없는 경우)
+            if (result[1] == null || result[1].isEmpty()) {
+                Pattern metaDescPattern1 = Pattern.compile("<meta\\s+name=[\"']description[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+                Pattern metaDescPattern2 = Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+name=[\"']description[\"']", Pattern.CASE_INSENSITIVE);
+                Matcher metaDescMatcher1 = metaDescPattern1.matcher(htmlStr);
+                Matcher metaDescMatcher2 = metaDescPattern2.matcher(htmlStr);
+                if (metaDescMatcher1.find()) {
+                    result[1] = decodeHtmlEntities(metaDescMatcher1.group(1));
+                } else if (metaDescMatcher2.find()) {
+                    result[1] = decodeHtmlEntities(metaDescMatcher2.group(1));
+                }
             }
 
             // og:title이 없으면 일반 title 태그 시도
@@ -423,6 +455,46 @@ public class AiSummaryService {
                 .replace("&#x27;", "'")
                 .replace("&hellip;", "...")
                 .replace("&nbsp;", " ");
+    }
+
+    /**
+     * 제목이 일반적인(의미 없는) 제목인지 확인
+     * 예: "기사 상세 보기", "Article View" 등
+     */
+    private boolean isGenericTitle(String title) {
+        if (title == null || title.isEmpty()) {
+            return true;
+        }
+        String lowerTitle = title.toLowerCase().trim();
+
+        // 일반적인 제목 패턴들
+        String[] genericPatterns = {
+            "기사 상세",
+            "기사 보기",
+            "상세 보기",
+            "article view",
+            "article detail",
+            "view article",
+            "untitled",
+            "no title",
+            "제목 없음",
+            "loading",
+            "로딩"
+        };
+
+        for (String pattern : genericPatterns) {
+            if (lowerTitle.contains(pattern)) {
+                return true;
+            }
+        }
+
+        // 제목이 사이트 이름만 있는 경우 (예: "AI타임스", "TechCrunch")
+        // 제목이 너무 짧은 경우 (5자 미만)
+        if (title.length() < 5) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

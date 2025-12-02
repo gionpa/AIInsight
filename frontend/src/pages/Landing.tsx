@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Landing() {
   const navigate = useNavigate()
+  const { login, logout, isAuthenticated, user } = useAuth()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
@@ -35,11 +37,28 @@ export default function Landing() {
               >
                 둘러보기
               </button>
-              <button
-                className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/25"
-              >
-                로그인
-              </button>
+              {isAuthenticated ? (
+                <div className="flex items-center gap-3">
+                  {user && (
+                    <span className="text-sm text-gray-300">
+                      {user.name}님
+                    </span>
+                  )}
+                  <button
+                    onClick={logout}
+                    className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-red-500 to-pink-500 rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-pink-500/25"
+                  >
+                    로그아웃
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={login}
+                  className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/25"
+                >
+                  로그인
+                </button>
+              )}
             </div>
           </nav>
         </header>

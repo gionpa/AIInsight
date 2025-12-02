@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getArticles, searchArticles, markArticleAsRead, getArticle } from '../api';
-import type { NewsArticle, ArticleCategory } from '../types';
+import { getArticles, searchArticles, markArticleAsRead, getArticle, getArticlesByImportance } from '../api';
+import type { NewsArticle, ArticleCategory, ArticleImportance } from '../types';
 import {
   Search,
   ExternalLink,
@@ -9,6 +9,7 @@ import {
   X,
   Star,
   Tag,
+  Filter,
 } from 'lucide-react';
 
 const categoryLabels: Record<ArticleCategory, string> = {
@@ -38,13 +39,19 @@ export default function Articles() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
+  const [importanceFilter, setImportanceFilter] = useState<ArticleImportance | 'ALL'>('ALL');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['articles', page, isSearching ? searchKeyword : ''],
-    queryFn: () =>
-      isSearching && searchKeyword
-        ? searchArticles(searchKeyword, page, 20)
-        : getArticles(page, 20),
+    queryKey: ['articles', page, isSearching ? searchKeyword : '', importanceFilter],
+    queryFn: () => {
+      if (isSearching && searchKeyword) {
+        return searchArticles(searchKeyword, page, 20);
+      }
+      if (importanceFilter !== 'ALL') {
+        return getArticlesByImportance(importanceFilter, page, 20);
+      }
+      return getArticles(page, 20);
+    },
   });
 
   const { data: articleDetail, isLoading: isLoadingDetail } = useQuery({
@@ -69,6 +76,14 @@ export default function Articles() {
   const clearSearch = () => {
     setSearchKeyword('');
     setIsSearching(false);
+    setImportanceFilter('ALL');
+    setPage(0);
+  };
+
+  const handleImportanceFilter = (importance: ArticleImportance | 'ALL') => {
+    setImportanceFilter(importance);
+    setIsSearching(false);
+    setSearchKeyword('');
     setPage(0);
   };
 
@@ -89,7 +104,7 @@ export default function Articles() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">뉴스 기사</h1>
 
         {/* Search */}
@@ -104,7 +119,7 @@ export default function Articles() {
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           </div>
-          {isSearching && (
+          {(isSearching || importanceFilter !== 'ALL') && (
             <button
               type="button"
               onClick={clearSearch}
@@ -120,6 +135,38 @@ export default function Articles() {
             검색
           </button>
         </form>
+      </div>
+
+      {/* Importance Filter */}
+      <div className="flex items-center gap-2 mb-6">
+        <Filter className="w-4 h-4 text-gray-500" />
+        <span className="text-sm text-gray-600 mr-2">중요도:</span>
+        <div className="flex gap-1">
+          {(['ALL', 'HIGH', 'MEDIUM', 'LOW'] as const).map((level) => (
+            <button
+              key={level}
+              onClick={() => handleImportanceFilter(level)}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                importanceFilter === level
+                  ? level === 'ALL'
+                    ? 'bg-blue-600 text-white'
+                    : level === 'HIGH'
+                    ? 'bg-red-600 text-white'
+                    : level === 'MEDIUM'
+                    ? 'bg-yellow-500 text-white'
+                    : 'bg-gray-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {level === 'ALL' ? '전체' : level === 'HIGH' ? '높음' : level === 'MEDIUM' ? '보통' : '낮음'}
+            </button>
+          ))}
+        </div>
+        {importanceFilter !== 'ALL' && (
+          <span className="ml-2 text-sm text-gray-500">
+            ({data?.totalElements || 0}개)
+          </span>
+        )}
       </div>
 
       {/* Articles Grid */}

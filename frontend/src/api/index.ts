@@ -81,6 +81,11 @@ export const getRelevantArticles = (minScore = 0.7, page = 0, size = 20) =>
     .get<Page<NewsArticle>>('/articles/relevant', { params: { minScore, page, size } })
     .then((res) => res.data);
 
+export const getArticlesByImportance = (importance: 'HIGH' | 'MEDIUM' | 'LOW', page = 0, size = 20) =>
+  apiClient
+    .get<Page<NewsArticle>>(`/articles/importance/${importance}`, { params: { page, size } })
+    .then((res) => res.data);
+
 export const markArticleAsRead = (id: number) =>
   apiClient.post(`/articles/${id}/read`);
 
