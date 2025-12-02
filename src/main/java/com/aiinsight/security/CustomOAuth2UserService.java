@@ -23,37 +23,56 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     @Override
     @Transactional
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
-        OAuth2User oAuth2User = super.loadUser(userRequest);
+        try {
+            log.info("OAuth2 loadUser started");
+            OAuth2User oAuth2User = super.loadUser(userRequest);
+            log.info("OAuth2User loaded from provider");
 
-        String registrationId = userRequest.getClientRegistration().getRegistrationId();
-        
-        if (!"naver".equals(registrationId)) {
-            throw new OAuth2AuthenticationException("Only Naver login is supported");
+            String registrationId = userRequest.getClientRegistration().getRegistrationId();
+            log.info("Registration ID: {}", registrationId);
+
+            if (!"naver".equals(registrationId)) {
+                throw new OAuth2AuthenticationException("Only Naver login is supported");
+            }
+
+            Map<String, Object> attributes = oAuth2User.getAttributes();
+            log.info("Attributes: {}", attributes);
+
+            Map<String, Object> response = (Map<String, Object>) attributes.get("response");
+            if (response == null) {
+                log.error("Response is null in attributes");
+                throw new OAuth2AuthenticationException("Invalid response from Naver");
+            }
+
+            String naverId = (String) response.get("id");
+            String email = (String) response.get("email");
+            String name = (String) response.get("name");
+            String profileImage = (String) response.get("profile_image");
+
+            log.info("Naver login: naverId={}, name={}, email={}", naverId, name, email);
+
+            User user = userRepository.findByNaverId(naverId)
+                    .map(existingUser -> {
+                        log.info("Existing user found, updating profile");
+                        existingUser.updateProfile(name, email, profileImage);
+                        existingUser.updateLastLogin();
+                        return existingUser;
+                    })
+                    .orElseGet(() -> {
+                        log.info("Creating new user");
+                        return userRepository.save(User.builder()
+                                .naverId(naverId)
+                                .email(email)
+                                .name(name)
+                                .profileImage(profileImage)
+                                .build());
+                    });
+
+            log.info("User processed successfully: userId={}", user.getId());
+            return new CustomOAuth2User(user, attributes);
+        } catch (Exception e) {
+            log.error("OAuth2 loadUser failed: {}", e.getMessage(), e);
+            throw e;
         }
-
-        Map<String, Object> attributes = oAuth2User.getAttributes();
-        Map<String, Object> response = (Map<String, Object>) attributes.get("response");
-
-        String naverId = (String) response.get("id");
-        String email = (String) response.get("email");
-        String name = (String) response.get("name");
-        String profileImage = (String) response.get("profile_image");
-
-        log.info("Naver login: naverId={}, name={}, email={}", naverId, name, email);
-
-        User user = userRepository.findByNaverId(naverId)
-                .map(existingUser -> {
-                    existingUser.updateProfile(name, email, profileImage);
-                    existingUser.updateLastLogin();
-                    return existingUser;
-                })
-                .orElseGet(() -> userRepository.save(User.builder()
-                        .naverId(naverId)
-                        .email(email)
-                        .name(name)
-                        .profileImage(profileImage)
-                        .build()));
-
-        return new CustomOAuth2User(user, attributes);
     }
 }
