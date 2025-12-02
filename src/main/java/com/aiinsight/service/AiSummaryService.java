@@ -96,22 +96,23 @@ public class AiSummaryService {
 
         String title = article.getTitle();
         String content = article.getContent();
+        String url = article.getOriginalUrl();
 
-        // 제목과 본문이 모두 없는 경우 URL에서 정보 추출 시도
-        if ((title == null || title.isEmpty()) && (content == null || content.isEmpty())) {
-            String url = article.getOriginalUrl();
+        // 제목이 없는 경우 URL에서 정보 추출 시도
+        if (title == null || title.isEmpty()) {
             if (url != null && !url.isEmpty()) {
                 // URL에서 메타데이터(og:title, og:description) 가져오기 시도
                 String[] metadata = fetchMetadataFromUrl(url);
                 if (metadata[0] != null && !metadata[0].isEmpty()) {
                     title = metadata[0];
-                    content = metadata[1] != null ? metadata[1] : title;
-                    log.info("URL 메타데이터에서 정보 추출: {} -> {}", url, title);
+                    if (content == null || content.isEmpty()) {
+                        content = metadata[1] != null ? metadata[1] : title;
+                    }
+                    log.info("URL 메타데이터에서 제목 추출: {} -> {}", url, title);
                 } else {
                     // 메타데이터 실패 시 URL 경로에서 제목 추측
                     title = extractTitleFromUrl(url);
-                    content = "URL: " + url;
-                    log.info("URL 경로에서 정보 추출: {} -> {}", url, title);
+                    log.info("URL 경로에서 제목 추출: {} -> {}", url, title);
                 }
             } else {
                 log.warn("분석할 내용이 없는 기사: {}", article.getId());
@@ -119,8 +120,19 @@ public class AiSummaryService {
             }
         }
 
+        // 본문이 없는 경우에도 URL에서 설명 추출 시도
         if (content == null || content.isEmpty()) {
-            content = title; // 본문이 없으면 제목만 사용
+            if (url != null && !url.isEmpty()) {
+                String[] metadata = fetchMetadataFromUrl(url);
+                if (metadata[1] != null && !metadata[1].isEmpty()) {
+                    content = metadata[1];
+                    log.info("URL 메타데이터에서 설명 추출: {}", url);
+                } else {
+                    content = title; // 본문이 없으면 제목 사용
+                }
+            } else {
+                content = title;
+            }
         }
 
         // 본문 길이 제한 (토큰 절약)

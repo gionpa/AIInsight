@@ -77,8 +77,16 @@ public class CrawlExecutionService {
             int newArticles = 0;
 
             for (CrawlResult.ArticleData articleData : result.getArticles()) {
+                // 빈 제목 또는 URL 체크
+                String title = articleData.getTitle();
+                String url = articleData.getUrl();
+                if (url == null || url.isEmpty()) {
+                    log.warn("URL이 없는 기사 건너뜀");
+                    continue;
+                }
+
                 // 중복 체크 후 저장
-                if (!newsArticleService.existsByHash(articleData.getUrl(), articleData.getTitle())) {
+                if (!newsArticleService.existsByHash(url, title)) {
                     NewsArticle saved = newsArticleService.save(
                             target,
                             articleData.getUrl(),
