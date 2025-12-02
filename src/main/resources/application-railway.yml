@@ -63,14 +63,17 @@ crawler:
   delay-between-requests: 2000
 
 # AI 요약 설정
+# Railway 환경에서는 Claude API 사용 (Claude CLI는 로컬 전용)
 ai:
-  provider: claude-cli
+  provider: ${AI_PROVIDER:claude}
   openai:
     api-key: ${OPENAI_API_KEY:}
     model: gpt-4o-mini
+    base-url: https://api.openai.com/v1
   claude:
     api-key: ${CLAUDE_API_KEY:}
     model: claude-3-haiku-20240307
+    base-url: https://api.anthropic.com/v1
   claude-cli:
     timeout: 180
 
