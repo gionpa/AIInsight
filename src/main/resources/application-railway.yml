@@ -92,6 +92,12 @@ server:
     enabled: true
   http2:
     enabled: true
+  forward-headers-strategy: framework
+
+# 앱 설정 (OAuth2 성공 후 리다이렉트용)
+app:
+  frontend-url: https://aiinsight-production.up.railway.app
+  cookie-secure: true
 
 logging:
   level:
