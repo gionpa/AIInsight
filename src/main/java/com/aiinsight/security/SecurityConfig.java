@@ -39,9 +39,20 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Static resources - must be accessible without authentication
+                        .requestMatchers(
+                                "/assets/**",
+                                "/vite.svg",
+                                "/*.js",
+                                "/*.css",
+                                "/*.ico",
+                                "/*.png",
+                                "/*.svg"
+                        ).permitAll()
                         // Public endpoints
                         .requestMatchers(
                                 "/",
+                                "/index.html",
                                 "/error",
                                 "/actuator/**",
                                 "/oauth2/**",
