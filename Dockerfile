@@ -1,7 +1,20 @@
 # Railway용 Dockerfile - Chrome/Selenium 포함
 # Multi-stage build로 최적화
 
-# Stage 1: Build
+# Stage 1: Frontend Build
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Frontend 의존성 설치
+COPY frontend/package*.json ./
+RUN npm ci
+
+# Frontend 소스 복사 및 빌드
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Backend Build
 FROM gradle:8.5-jdk17 AS builder
 
 WORKDIR /app
@@ -16,13 +29,16 @@ RUN gradle dependencies --no-daemon || true
 # 소스 코드 복사
 COPY src ./src
 
-# Frontend 빌드 (dist가 이미 있으면 복사)
-COPY frontend/dist ./frontend/dist
+# Frontend 빌드 결과 복사
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+# 정적 파일을 resources/static으로 복사
+RUN mkdir -p src/main/resources/static && cp -r frontend/dist/* src/main/resources/static/
 
 # JAR 빌드
 RUN gradle bootJar --no-daemon -x test
 
-# Stage 2: Runtime with Chrome
+# Stage 3: Runtime with Chrome
 FROM eclipse-temurin:17-jre-jammy
 
 # 필수 패키지 및 Chrome 설치
@@ -50,6 +66,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     libu2f-udev \
     libvulkan1 \
+    dbus \
     && rm -rf /var/lib/apt/lists/*
 
 # Chrome 설치
@@ -62,9 +79,6 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --d
 # Chrome 버전 확인
 RUN google-chrome --version
 
-# 애플리케이션 사용자 생성
-RUN useradd -m -s /bin/bash appuser
-
 WORKDIR /app
 
 # JAR 복사
@@ -73,16 +87,16 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 # 정적 파일 복사
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
-# 권한 설정
-RUN chown -R appuser:appuser /app
-
-USER appuser
+# Chrome이 root로 실행되어야 하므로 appuser 제거하고 root로 실행
+# Railway 환경에서는 보안보다 기능이 우선
 
 # 환경변수 설정
 ENV JAVA_OPTS="-Xmx512m -Xms256m"
 ENV SPRING_PROFILES_ACTIVE=railway
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV CHROME_PATH=/usr/bin/google-chrome
+# Chrome이 sandbox 없이 실행되도록 환경변수 설정
+ENV CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu"
 
 # 포트 노출
 EXPOSE 8080
