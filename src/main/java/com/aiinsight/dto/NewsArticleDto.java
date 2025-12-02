@@ -18,6 +18,7 @@ public class NewsArticleDto {
         private String targetName;
         private String originalUrl;
         private String title;
+        private String titleKo;
         private String summary;
         private String author;
         private LocalDateTime publishedAt;
@@ -40,6 +41,7 @@ public class NewsArticleDto {
                     .targetName(entity.getTarget().getName())
                     .originalUrl(entity.getOriginalUrl())
                     .title(entity.getTitle())
+                    .titleKo(entity.getTitleKo())
                     .summary(entity.getSummary())
                     .author(entity.getAuthor())
                     .publishedAt(entity.getPublishedAt())
@@ -65,6 +67,7 @@ public class NewsArticleDto {
         private String targetName;
         private String originalUrl;
         private String title;
+        private String titleKo;
         private String content;
         private String summary;
         private String author;
@@ -89,6 +92,7 @@ public class NewsArticleDto {
                     .targetName(entity.getTarget().getName())
                     .originalUrl(entity.getOriginalUrl())
                     .title(entity.getTitle())
+                    .titleKo(entity.getTitleKo())
                     .content(entity.getContent())
                     .summary(entity.getSummary())
                     .author(entity.getAuthor())

@@ -14,6 +14,9 @@ import java.util.Optional;
 @Repository
 public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> {
 
+    // 전체 기사 최신순 조회
+    Page<NewsArticle> findAllByOrderByCrawledAtDesc(Pageable pageable);
+
     boolean existsByContentHash(String contentHash);
 
     Optional<NewsArticle> findByContentHash(String contentHash);

@@ -39,6 +39,7 @@ export interface NewsArticle {
   targetName: string;
   originalUrl: string;
   title: string;
+  titleKo?: string;
   summary?: string;
   author?: string;
   publishedAt?: string;
@@ -147,4 +148,46 @@ export interface CategoryReport {
   categoryDisplayName: string;
   articleCount: number;
   articles: ArticleSummary[];
+}
+
+// 관심 주제 관련 타입
+export interface InterestTopic {
+  id: number;
+  name: string;
+  description?: string;
+  keywords: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateInterestTopicRequest {
+  name: string;
+  description?: string;
+  keywords: string;
+}
+
+export interface UpdateInterestTopicRequest {
+  name?: string;
+  description?: string;
+  keywords?: string;
+  isActive?: boolean;
+}
+
+export interface TopicReportResponse {
+  topicId: number;
+  topicName: string;
+  description?: string;
+  keywords: string;
+  totalArticles: number;
+  highImportanceCount: number;
+  articles: NewsArticle[];
+}
+
+export interface AllTopicsReportResponse {
+  generatedAt: string;
+  totalTopics: number;
+  totalArticles: number;
+  topics: TopicReportResponse[];
 }

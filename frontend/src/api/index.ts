@@ -12,6 +12,11 @@ import type {
   ArticleCategory,
   DailyReport,
   CategoryReport,
+  InterestTopic,
+  CreateInterestTopicRequest,
+  UpdateInterestTopicRequest,
+  TopicReportResponse,
+  AllTopicsReportResponse,
 } from '../types';
 
 // Dashboard
@@ -125,3 +130,34 @@ export const getCategoryReport = () =>
 
 export const getReportByCategory = (category: string) =>
   apiClient.get<CategoryReport>(`/reports/category/${category}`).then((res) => res.data);
+
+// Interest Topics
+export const getInterestTopics = () =>
+  apiClient.get<InterestTopic[]>('/interest-topics').then((res) => res.data);
+
+export const getActiveInterestTopics = () =>
+  apiClient.get<InterestTopic[]>('/interest-topics/active').then((res) => res.data);
+
+export const getInterestTopic = (id: number) =>
+  apiClient.get<InterestTopic>(`/interest-topics/${id}`).then((res) => res.data);
+
+export const createInterestTopic = (data: CreateInterestTopicRequest) =>
+  apiClient.post<InterestTopic>('/interest-topics', data).then((res) => res.data);
+
+export const updateInterestTopic = (id: number, data: UpdateInterestTopicRequest) =>
+  apiClient.put<InterestTopic>(`/interest-topics/${id}`, data).then((res) => res.data);
+
+export const deleteInterestTopic = (id: number) =>
+  apiClient.delete(`/interest-topics/${id}`);
+
+export const reorderInterestTopics = (topicIds: number[]) =>
+  apiClient.post<InterestTopic[]>('/interest-topics/reorder', { topicIds }).then((res) => res.data);
+
+export const getTopicReport = (topicId: number, limit = 10) =>
+  apiClient.get<TopicReportResponse>(`/interest-topics/${topicId}/report`, { params: { limit } }).then((res) => res.data);
+
+export const getAllTopicsReport = (articlesPerTopic = 5) =>
+  apiClient.get<AllTopicsReportResponse>('/interest-topics/report', { params: { articlesPerTopic } }).then((res) => res.data);
+
+export const initializeDefaultTopics = () =>
+  apiClient.post<InterestTopic[]>('/interest-topics/initialize').then((res) => res.data);

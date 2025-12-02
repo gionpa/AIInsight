@@ -1,6 +1,7 @@
 package com.aiinsight.service;
 
 import com.aiinsight.crawler.CrawlResult;
+import com.aiinsight.crawler.SeleniumCrawler;
 import com.aiinsight.crawler.WebCrawler;
 import com.aiinsight.domain.article.NewsArticle;
 import com.aiinsight.domain.crawl.CrawlTarget;
@@ -18,9 +19,11 @@ public class CrawlExecutionService {
     private static final long RETRY_DELAY_MS = 60000; // 1분
 
     private final WebCrawler webCrawler;
+    private final SeleniumCrawler seleniumCrawler;
     private final CrawlTargetService crawlTargetService;
     private final NewsArticleService newsArticleService;
     private final CrawlHistoryService crawlHistoryService;
+    private final AiSummaryService aiSummaryService;
 
     @Transactional
     public CrawlResult executeCrawl(Long targetId) {
@@ -58,9 +61,17 @@ public class CrawlExecutionService {
     }
 
     private CrawlResult doExecuteCrawl(CrawlTarget target) {
-        log.info("크롤링 시작: {} ({})", target.getName(), target.getUrl());
+        log.info("크롤링 시작: {} ({}) - 타입: {}", target.getName(), target.getUrl(), target.getCrawlType());
 
-        CrawlResult result = webCrawler.crawl(target);
+        // crawlType에 따라 적절한 크롤러 선택
+        CrawlResult result;
+        if (target.getCrawlType() == CrawlTarget.CrawlType.DYNAMIC) {
+            log.info("DYNAMIC 크롤링 사용 (Selenium): {}", target.getName());
+            result = seleniumCrawler.crawl(target);
+        } else {
+            log.info("STATIC 크롤링 사용 (Jsoup): {}", target.getName());
+            result = webCrawler.crawl(target);
+        }
 
         if (result.isSuccess()) {
             int newArticles = 0;
@@ -79,6 +90,15 @@ public class CrawlExecutionService {
                     );
                     if (saved != null) {
                         newArticles++;
+
+                        // 크롤링 시점에 AI 분석 수행 (한글 제목, 요약, 카테고리, 중요도)
+                        try {
+                            log.info("AI 분석 시작: {} (ID: {})", saved.getTitle(), saved.getId());
+                            aiSummaryService.summarizeArticle(saved);
+                            log.info("AI 분석 완료: {} (ID: {})", saved.getTitle(), saved.getId());
+                        } catch (Exception e) {
+                            log.warn("AI 분석 실패 (나중에 재시도 가능): {} - {}", saved.getId(), e.getMessage());
+                        }
                     }
                 }
             }

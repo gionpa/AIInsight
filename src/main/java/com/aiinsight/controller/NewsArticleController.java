@@ -98,10 +98,12 @@ public class NewsArticleController {
     }
 
     @PostMapping("/{id}/analyze")
-    @Operation(summary = "단일 기사 AI 분석", description = "특정 기사에 대해 AI 요약 및 중요도 분석을 실행합니다")
-    public ResponseEntity<NewsArticleDto.DetailResponse> analyzeArticle(@PathVariable Long id) {
+    @Operation(summary = "단일 기사 AI 분석", description = "특정 기사에 대해 AI 요약 및 중요도 분석을 실행합니다. force=true로 이미 분석된 기사도 재분석 가능")
+    public ResponseEntity<NewsArticleDto.DetailResponse> analyzeArticle(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean force) {
         NewsArticle article = newsArticleService.findEntityById(id);
-        aiSummaryService.summarizeArticle(article);
+        aiSummaryService.summarizeArticle(article, force);
         return ResponseEntity.ok(newsArticleService.findById(id));
     }
 
@@ -135,5 +137,23 @@ public class NewsArticleController {
             @PathVariable NewsArticle.ArticleImportance importance,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(newsArticleService.findByImportance(importance, pageable));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "기사 삭제", description = "특정 기사를 삭제합니다")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        newsArticleService.delete(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/batch")
+    @Operation(summary = "다중 기사 삭제", description = "여러 기사를 한번에 삭제합니다")
+    public ResponseEntity<Map<String, Object>> deleteBatch(@RequestBody List<Long> ids) {
+        int deleted = newsArticleService.deleteBatch(ids);
+        return ResponseEntity.ok(Map.of(
+                "requested", ids.size(),
+                "deleted", deleted,
+                "message", deleted + "개 기사 삭제 완료"
+        ));
     }
 }

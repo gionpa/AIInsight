@@ -139,14 +139,15 @@ export default function Articles() {
               />
             )}
             <div className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="font-medium line-clamp-2 flex-1">{article.title}</h3>
+              <div className="flex items-start justify-between mb-1">
+                <h3 className="font-medium line-clamp-2 flex-1">{article.titleKo || article.title}</h3>
                 {article.isNew && (
                   <span className="ml-2 px-2 py-0.5 bg-blue-500 text-white text-xs rounded">
                     NEW
                   </span>
                 )}
               </div>
+              <div className="text-xs text-gray-400 mb-2">ID: {article.id}</div>
 
               {article.summary && (
                 <p className="text-sm text-gray-600 line-clamp-2 mb-3">
@@ -261,7 +262,8 @@ export default function Articles() {
               </div>
             ) : articleDetail ? (
               <div className="p-6">
-                <h1 className="text-2xl font-bold mb-4">{articleDetail.title}</h1>
+                <h1 className="text-2xl font-bold mb-1">{articleDetail.titleKo || articleDetail.title}</h1>
+                <div className="text-xs text-gray-400 mb-4">ID: {articleDetail.id}</div>
 
                 <div className="flex flex-wrap gap-2 mb-4">
                   {articleDetail.category && (

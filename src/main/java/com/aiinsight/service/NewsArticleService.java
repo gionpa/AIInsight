@@ -31,7 +31,7 @@ public class NewsArticleService {
     private final NewsArticleRepository newsArticleRepository;
 
     public Page<NewsArticleDto.Response> findAll(Pageable pageable) {
-        return newsArticleRepository.findAll(pageable)
+        return newsArticleRepository.findAllByOrderByCrawledAtDesc(pageable)
                 .map(NewsArticleDto.Response::from);
     }
 
@@ -154,6 +154,27 @@ public class NewsArticleService {
     public Page<NewsArticleDto.Response> findByImportance(NewsArticle.ArticleImportance importance, Pageable pageable) {
         return newsArticleRepository.findByImportanceOrderByCrawledAtDesc(importance, pageable)
                 .map(NewsArticleDto.Response::from);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        if (newsArticleRepository.existsById(id)) {
+            newsArticleRepository.deleteById(id);
+            log.info("기사 삭제: ID {}", id);
+        }
+    }
+
+    @Transactional
+    public int deleteBatch(List<Long> ids) {
+        int deleted = 0;
+        for (Long id : ids) {
+            if (newsArticleRepository.existsById(id)) {
+                newsArticleRepository.deleteById(id);
+                deleted++;
+            }
+        }
+        log.info("{}개 기사 삭제 완료", deleted);
+        return deleted;
     }
 
     private String generateHash(String url, String title) {

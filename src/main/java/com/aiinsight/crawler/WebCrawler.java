@@ -73,23 +73,79 @@ public class WebCrawler {
         }
     }
 
+    /**
+     * 웹 페이지 문서를 가져옵니다.
+     * - 랜덤 User-Agent 사용 (봇 감지 회피)
+     * - 브라우저와 동일한 HTTP 헤더 설정
+     * - 403/429 에러 시 지수 백오프로 재시도
+     */
     private Document fetchDocument(String url) throws IOException {
-        return Jsoup.connect(url)
-                .userAgent(crawlerConfig.getUserAgent())
-                .timeout(crawlerConfig.getTimeout())
-                .followRedirects(true)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9,ko;q=0.8")
-                .header("Accept-Encoding", "gzip, deflate")
-                .header("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
-                .header("sec-ch-ua-mobile", "?0")
-                .header("sec-ch-ua-platform", "\"macOS\"")
-                .header("sec-fetch-dest", "document")
-                .header("sec-fetch-mode", "navigate")
-                .header("sec-fetch-site", "none")
-                .header("sec-fetch-user", "?1")
-                .header("upgrade-insecure-requests", "1")
-                .get();
+        int maxRetries = crawlerConfig.getRetryCount();
+        int retryDelay = crawlerConfig.getRetryDelayMs();
+        IOException lastException = null;
+
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return Jsoup.connect(url)
+                        .userAgent(crawlerConfig.getRandomUserAgent())  // 랜덤 User-Agent
+                        .timeout(crawlerConfig.getTimeout())
+                        .followRedirects(true)
+                        // 브라우저처럼 보이기 위한 필수 헤더
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+                        .header("Accept-Language", "en-US,en;q=0.9,ko;q=0.8")
+                        .header("Accept-Encoding", "gzip, deflate, br")
+                        .header("Connection", "keep-alive")
+                        .header("Upgrade-Insecure-Requests", "1")
+                        .header("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
+                        .header("sec-ch-ua-mobile", "?0")
+                        .header("sec-ch-ua-platform", "\"macOS\"")
+                        .header("Sec-Fetch-Dest", "document")
+                        .header("Sec-Fetch-Mode", "navigate")
+                        .header("Sec-Fetch-Site", "none")
+                        .header("Sec-Fetch-User", "?1")
+                        .header("Cache-Control", "max-age=0")
+                        .referrer("https://www.google.com/")  // 구글에서 온 것처럼
+                        .get();
+            } catch (org.jsoup.HttpStatusException e) {
+                lastException = e;
+                int statusCode = e.getStatusCode();
+
+                // 403 (Forbidden) 또는 429 (Too Many Requests)는 재시도
+                if ((statusCode == 403 || statusCode == 429) && attempt < maxRetries) {
+                    // 지수 백오프: 2초, 4초, 8초...
+                    int waitTime = retryDelay * (int) Math.pow(2, attempt - 1);
+                    log.warn("HTTP {} 에러 발생, {}ms 후 재시도 ({}/{}): {}",
+                            statusCode, waitTime, attempt, maxRetries, url);
+                    try {
+                        Thread.sleep(waitTime);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                } else {
+                    // 다른 에러이거나 마지막 시도면 바로 throw
+                    throw e;
+                }
+            } catch (IOException e) {
+                lastException = e;
+                if (attempt < maxRetries) {
+                    int waitTime = retryDelay * (int) Math.pow(2, attempt - 1);
+                    log.warn("IO 에러 발생, {}ms 후 재시도 ({}/{}): {} - {}",
+                            waitTime, attempt, maxRetries, url, e.getMessage());
+                    try {
+                        Thread.sleep(waitTime);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                } else {
+                    throw e;
+                }
+            }
+        }
+
+        // 모든 재시도 실패
+        throw lastException != null ? lastException : new IOException("알 수 없는 오류로 크롤링 실패: " + url);
     }
 
     private List<CrawlResult.ArticleData> extractArticles(Document doc, SelectorConfig config, String baseUrl) {
