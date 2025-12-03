@@ -111,8 +111,14 @@ public class SeleniumCrawler {
 
         // Docker 환경 추가 설정
         options.addArguments("--disable-setuid-sandbox");
-        options.addArguments("--single-process");
-        options.addArguments("--remote-debugging-port=9222");
+        // --single-process 제거 (macOS에서 렌더러 연결 문제 발생)
+        // --remote-debugging-port=0 사용 (동적 포트 할당으로 충돌 방지)
+        options.addArguments("--remote-debugging-port=0");
+
+        // 추가 안정성 설정
+        options.addArguments("--disable-crash-reporter");
+        options.addArguments("--disable-background-networking");
+        options.addArguments("--disable-default-apps");
 
         // 봇 감지 우회를 위한 설정
         options.addArguments("--disable-blink-features=AutomationControlled");
