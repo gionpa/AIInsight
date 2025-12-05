@@ -232,7 +232,7 @@ export default function Articles() {
               <div className="flex justify-between items-center text-xs text-gray-500">
                 <span>{article.targetName}</span>
                 <span>
-                  {new Date(article.crawledAt).toLocaleString('ko-KR', {
+                  {new Date(article.publishedAt || article.crawledAt).toLocaleString('ko-KR', {
                     year: 'numeric',
                     month: '2-digit',
                     day: '2-digit',
