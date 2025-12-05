@@ -92,6 +92,11 @@ server:
   http2:
     enabled: true
 
+# OAuth2 성공 후 프런트 리다이렉트 및 쿠키 설정
+app:
+  frontend-url: ${FRONTEND_URL:https://aiinsight-production.up.railway.app}
+  cookie-secure: ${COOKIE_SECURE:true}
+
 logging:
   level:
     root: INFO
