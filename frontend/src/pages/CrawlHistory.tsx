@@ -150,7 +150,14 @@ export default function CrawlHistory() {
                     {history.durationMs ? `${(history.durationMs / 1000).toFixed(2)}s` : '-'}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
-                    {new Date(history.executedAt).toLocaleString()}
+                    {new Date(history.executedAt).toLocaleString('ko-KR', {
+                      timeZone: 'Asia/Seoul',
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </td>
                   <td className="px-4 py-3">
                     {history.errorMessage && (

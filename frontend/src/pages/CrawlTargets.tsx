@@ -178,7 +178,14 @@ export default function CrawlTargets() {
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-500">
                   {target.lastCrawledAt
-                    ? new Date(target.lastCrawledAt).toLocaleString()
+                    ? new Date(target.lastCrawledAt).toLocaleString('ko-KR', {
+                        timeZone: 'Asia/Seoul',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
                     : '-'}
                 </td>
                 <td className="px-4 py-3">
