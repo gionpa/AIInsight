@@ -17,6 +17,7 @@ import {
   Power,
   ExternalLink,
   X,
+  Loader2,
 } from 'lucide-react';
 
 export default function CrawlTargets() {
@@ -24,6 +25,7 @@ export default function CrawlTargets() {
   const [page, setPage] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState<CrawlTarget | null>(null);
+  const [executingTargetId, setExecutingTargetId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['crawlTargets', page],
@@ -65,6 +67,7 @@ export default function CrawlTargets() {
   const executeMutation = useMutation({
     mutationFn: executeCrawl,
     onSuccess: (result) => {
+      setExecutingTargetId(null);
       alert(
         result.success
           ? `크롤링 완료: ${result.articlesFound}개 기사 발견`
@@ -72,7 +75,15 @@ export default function CrawlTargets() {
       );
       queryClient.invalidateQueries({ queryKey: ['crawlTargets'] });
     },
+    onError: () => {
+      setExecutingTargetId(null);
+    },
   });
+
+  const handleExecuteCrawl = (targetId: number) => {
+    setExecutingTargetId(targetId);
+    executeMutation.mutate(targetId);
+  };
 
   const handleSubmit = (formData: CreateCrawlTargetRequest) => {
     if (editingTarget) {
@@ -173,12 +184,20 @@ export default function CrawlTargets() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => executeMutation.mutate(target.id)}
-                      disabled={executeMutation.isPending}
-                      className="p-1 text-green-600 hover:bg-green-50 rounded cursor-pointer"
-                      title="크롤링 실행"
+                      onClick={() => handleExecuteCrawl(target.id)}
+                      disabled={executingTargetId !== null}
+                      className={`p-1 rounded cursor-pointer ${
+                        executingTargetId === target.id
+                          ? 'text-blue-600 bg-blue-50'
+                          : 'text-green-600 hover:bg-green-50'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title={executingTargetId === target.id ? '크롤링 중...' : '크롤링 실행'}
                     >
-                      <Play className="w-5 h-5" />
+                      {executingTargetId === target.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Play className="w-5 h-5" />
+                      )}
                     </button>
                     <button
                       onClick={() => toggleMutation.mutate(target.id)}
