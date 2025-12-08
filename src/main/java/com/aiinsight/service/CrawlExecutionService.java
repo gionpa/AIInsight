@@ -119,14 +119,9 @@ public class CrawlExecutionService {
                     if (saved != null) {
                         newArticles++;
 
-                        // 크롤링 시점에 AI 분석 수행 (한글 제목, 요약, 카테고리, 중요도)
-                        try {
-                            log.info("AI 분석 시작: {} (ID: {})", saved.getTitle(), saved.getId());
-                            aiSummaryService.summarizeArticle(saved);
-                            log.info("AI 분석 완료: {} (ID: {})", saved.getTitle(), saved.getId());
-                        } catch (Exception e) {
-                            log.warn("AI 분석 실패 (나중에 재시도 가능): {} - {}", saved.getId(), e.getMessage());
-                        }
+                        // 비동기로 AI 분석 수행 (크롤링 응답을 블로킹하지 않음)
+                        log.info("AI 분석 비동기 요청: {} (ID: {})", saved.getTitle(), saved.getId());
+                        aiSummaryService.summarizeArticleAsync(saved.getId());
                     }
                 }
             }

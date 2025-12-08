@@ -10,6 +10,8 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import org.springframework.scheduling.annotation.Async;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -77,6 +79,22 @@ public class AiSummaryService {
 
     public void summarizeArticle(NewsArticle article) {
         summarizeArticle(article, false);
+    }
+
+    /**
+     * 비동기로 기사 요약 실행 (크롤링 응답을 블로킹하지 않음)
+     * @param articleId 분석할 기사 ID
+     */
+    @Async("aiAnalysisExecutor")
+    public void summarizeArticleAsync(Long articleId) {
+        try {
+            NewsArticle article = newsArticleService.findEntityById(articleId);
+            if (article != null) {
+                summarizeArticle(article, false);
+            }
+        } catch (Exception e) {
+            log.error("비동기 AI 분석 실패 (기사 ID: {}): {}", articleId, e.getMessage());
+        }
     }
 
     /**

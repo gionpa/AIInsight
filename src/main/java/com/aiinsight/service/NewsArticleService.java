@@ -41,6 +41,13 @@ public class NewsArticleService {
         return NewsArticleDto.DetailResponse.from(article);
     }
 
+    /**
+     * 엔티티 직접 조회 (내부 서비스 용도)
+     */
+    public NewsArticle findEntityById(Long id) {
+        return newsArticleRepository.findById(id).orElse(null);
+    }
+
     public Page<NewsArticleDto.Response> findByTargetId(Long targetId, Pageable pageable) {
         return newsArticleRepository.findByTargetIdOrderByCrawledAtDesc(targetId, pageable)
                 .map(NewsArticleDto.Response::from);
@@ -144,11 +151,6 @@ public class NewsArticleService {
     public boolean existsByHash(String url, String title) {
         String hash = generateHash(url, title);
         return newsArticleRepository.existsByContentHash(hash);
-    }
-
-    public NewsArticle findEntityById(Long id) {
-        return newsArticleRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("기사를 찾을 수 없습니다: " + id));
     }
 
     public Page<NewsArticleDto.Response> findByImportance(NewsArticle.ArticleImportance importance, Pageable pageable) {
