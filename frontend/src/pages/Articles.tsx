@@ -39,7 +39,7 @@ export default function Articles() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
-  const [importanceFilter, setImportanceFilter] = useState<ArticleImportance | 'ALL'>('ALL');
+  const [importanceFilter, setImportanceFilter] = useState<ArticleImportance | 'ALL'>('HIGH');
 
   const { data, isLoading } = useQuery({
     queryKey: ['articles', page, isSearching ? searchKeyword : '', importanceFilter],
