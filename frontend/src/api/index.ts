@@ -92,6 +92,9 @@ export const markArticleAsRead = (id: number) =>
 export const markArticlesAsRead = (ids: number[]) =>
   apiClient.post('/articles/read', ids);
 
+export const deleteArticle = (id: number) =>
+  apiClient.delete(`/articles/${id}`);
+
 export const getNewArticlesCount = () =>
   apiClient.get<number>('/articles/count/new').then((res) => res.data);
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getArticles, searchArticles, markArticleAsRead, getArticle, getArticlesByImportance } from '../api';
+import { getArticles, searchArticles, markArticleAsRead, getArticle, getArticlesByImportance, deleteArticle } from '../api';
 import type { NewsArticle, ArticleCategory, ArticleImportance } from '../types';
 import {
   Search,
@@ -66,6 +66,22 @@ export default function Articles() {
       queryClient.invalidateQueries({ queryKey: ['articles'] });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteArticle,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['articles'] });
+    },
+  });
+
+  const handleDeleteArticle = (article: NewsArticle, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const title = article.titleKo || article.title || `ID: ${article.id}`;
+    const truncatedTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
+    if (window.confirm(`이 기사를 삭제하시겠습니까?\n\n"${truncatedTitle}"`)) {
+      deleteMutation.mutate(article.id);
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,10 +195,25 @@ export default function Articles() {
         {data?.content.map((article) => (
           <div
             key={article.id}
-            className={`bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow ${
+            className={`bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow relative ${
               article.isNew ? 'ring-2 ring-blue-500' : ''
             }`}
           >
+            {/* 우상단 버튼 영역: NEW 배지 + 삭제 버튼 */}
+            <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+              {article.isNew && (
+                <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded shadow">
+                  NEW
+                </span>
+              )}
+              <button
+                onClick={(e) => handleDeleteArticle(article, e)}
+                className="p-1 bg-white/90 hover:bg-red-100 text-gray-400 hover:text-red-600 rounded shadow transition-colors"
+                title="기사 삭제"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             {article.thumbnailUrl && (
               <img
                 src={article.thumbnailUrl}
@@ -192,12 +223,7 @@ export default function Articles() {
             )}
             <div className="p-4">
               <div className="flex items-start justify-between mb-1">
-                <h3 className="font-medium line-clamp-2 flex-1">{article.titleKo || article.title}</h3>
-                {article.isNew && (
-                  <span className="ml-2 px-2 py-0.5 bg-blue-500 text-white text-xs rounded">
-                    NEW
-                  </span>
-                )}
+                <h3 className="font-medium line-clamp-2 flex-1 pr-2">{article.titleKo || article.title}</h3>
               </div>
               <div className="text-xs text-gray-400 mb-2">ID: {article.id}</div>
 
