@@ -63,9 +63,9 @@ crawler:
   delay-between-requests: 2000
 
 # AI 요약 설정
-# Railway 환경에서는 Claude API 사용 (Claude CLI는 로컬 전용)
+# Railway 환경에서도 Claude CLI 사용 (로컬과 동일)
 ai:
-  provider: ${AI_PROVIDER:claude}
+  provider: ${AI_PROVIDER:claude-cli}
   openai:
     api-key: ${OPENAI_API_KEY:}
     model: gpt-4o-mini
@@ -76,6 +76,7 @@ ai:
     base-url: https://api.anthropic.com/v1
   claude-cli:
     timeout: 180
+    command: claude  # npm 글로벌 설치된 CLI 사용
 
 # Swagger UI 설정 (프로덕션에서는 비활성화)
 springdoc:

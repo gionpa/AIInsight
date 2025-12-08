@@ -85,6 +85,15 @@ RUN echo "Chrome installed at: $(which google-chrome)" && google-chrome --versio
 # /dev/shm 크기 문제 해결을 위한 설정
 RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
 
+# Node.js 20 설치 (Claude CLI 실행용)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude CLI 설치 (npm 글로벌)
+RUN npm install -g @anthropic-ai/claude-code \
+    && claude --version || echo "Claude CLI installed"
+
 WORKDIR /app
 
 # JAR 복사
@@ -93,16 +102,14 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 # 정적 파일 복사
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
-# Chrome이 root로 실행되어야 하므로 appuser 제거하고 root로 실행
-# Railway 환경에서는 보안보다 기능이 우선
-
 # 환경변수 설정
 ENV JAVA_OPTS="-Xmx512m -Xms256m"
 ENV SPRING_PROFILES_ACTIVE=railway
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV CHROME_PATH=/usr/bin/google-chrome
-# Chrome이 sandbox 없이 실행되도록 환경변수 설정
 ENV CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu"
+# Claude CLI 설정
+ENV PATH="/usr/local/bin:$PATH"
 
 # 포트 노출
 EXPOSE 8080
