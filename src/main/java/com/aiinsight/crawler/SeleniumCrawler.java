@@ -31,11 +31,69 @@ public class SeleniumCrawler {
     private final CrawlerConfig crawlerConfig;
     private final ObjectMapper objectMapper;
 
+    private volatile boolean seleniumAvailable = true;
+    private volatile String unavailableReason = null;
+
     @PostConstruct
     public void init() {
         log.info("SeleniumCrawler 초기화 - ChromeDriver 설정 중...");
-        WebDriverManager.chromedriver().setup();
-        log.info("ChromeDriver 설정 완료");
+        try {
+            // Chrome 바이너리 확인
+            String chromeBinary = System.getenv("CHROME_BIN");
+            if (chromeBinary != null && !chromeBinary.isEmpty()) {
+                log.info("CHROME_BIN 환경변수 감지: {}", chromeBinary);
+                java.io.File chromeFile = new java.io.File(chromeBinary);
+                if (!chromeFile.exists()) {
+                    log.warn("Chrome 바이너리가 존재하지 않음: {}", chromeBinary);
+                    seleniumAvailable = false;
+                    unavailableReason = "Chrome binary not found: " + chromeBinary;
+                    return;
+                }
+            }
+
+            WebDriverManager.chromedriver().setup();
+            log.info("ChromeDriver 설정 완료");
+
+            // 테스트 드라이버 생성으로 실제 동작 확인
+            testDriverCreation();
+
+        } catch (Exception e) {
+            log.warn("ChromeDriver 설정 실패 - Selenium 크롤링 비활성화: {}", e.getMessage());
+            seleniumAvailable = false;
+            unavailableReason = e.getMessage();
+        }
+    }
+
+    private void testDriverCreation() {
+        WebDriver testDriver = null;
+        try {
+            testDriver = createDriver();
+            log.info("Selenium 드라이버 테스트 성공 - Selenium 크롤링 활성화됨");
+        } catch (Exception e) {
+            log.warn("Selenium 드라이버 테스트 실패: {}", e.getMessage());
+            seleniumAvailable = false;
+            unavailableReason = "Driver creation failed: " + e.getMessage();
+        } finally {
+            if (testDriver != null) {
+                try {
+                    testDriver.quit();
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    /**
+     * Selenium 크롤링이 현재 환경에서 사용 가능한지 반환
+     */
+    public boolean isAvailable() {
+        return seleniumAvailable;
+    }
+
+    /**
+     * Selenium 사용 불가 사유 반환
+     */
+    public String getUnavailableReason() {
+        return unavailableReason;
     }
 
     public CrawlResult crawl(CrawlTarget target) {
@@ -102,23 +160,31 @@ public class SeleniumCrawler {
             options.setBinary(chromeBinary);
         }
 
-        // Headless 모드 설정
+        // Headless 모드 설정 (새 headless 모드 사용)
         options.addArguments("--headless=new");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--disable-gpu");
         options.addArguments("--window-size=1920,1080");
 
-        // Docker 환경 추가 설정
+        // Docker/Railway 환경 필수 설정
         options.addArguments("--disable-setuid-sandbox");
-        // --single-process 제거 (macOS에서 렌더러 연결 문제 발생)
-        // --remote-debugging-port=0 사용 (동적 포트 할당으로 충돌 방지)
         options.addArguments("--remote-debugging-port=0");
 
-        // 추가 안정성 설정
+        // 메모리 제한 환경(Railway)을 위한 최적화
         options.addArguments("--disable-crash-reporter");
         options.addArguments("--disable-background-networking");
         options.addArguments("--disable-default-apps");
+        options.addArguments("--disable-sync");
+        options.addArguments("--disable-translate");
+        options.addArguments("--disable-background-timer-throttling");
+        options.addArguments("--disable-renderer-backgrounding");
+        options.addArguments("--disable-backgrounding-occluded-windows");
+        options.addArguments("--disable-ipc-flooding-protection");
+
+        // /dev/shm 문제 해결 - 디스크 기반 임시 디렉토리 사용
+        options.addArguments("--disable-features=VizDisplayCompositor");
+        options.addArguments("--disable-software-rasterizer");
 
         // 봇 감지 우회를 위한 설정
         options.addArguments("--disable-blink-features=AutomationControlled");
@@ -128,14 +194,14 @@ public class SeleniumCrawler {
         // User-Agent 설정
         options.addArguments("user-agent=" + crawlerConfig.getRandomUserAgent());
 
-        // 이미지 로딩 비활성화 (성능 향상)
+        // 리소스 사용량 최적화
         options.addArguments("--blink-settings=imagesEnabled=false");
-
-        // 메모리 사용량 최적화
         options.addArguments("--disable-extensions");
         options.addArguments("--disable-plugins");
         options.addArguments("--disable-infobars");
+        options.addArguments("--disable-notifications");
 
+        log.info("ChromeDriver 생성 시도...");
         return new ChromeDriver(options);
     }
 

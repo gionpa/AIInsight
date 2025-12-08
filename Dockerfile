@@ -39,7 +39,7 @@ RUN mkdir -p src/main/resources/static && cp -r frontend/dist/* src/main/resourc
 RUN gradle bootJar --no-daemon -x test
 
 # Stage 3: Runtime with Chrome
-FROM eclipse-temurin:17-jre-jammy
+FROM --platform=linux/amd64 eclipse-temurin:17-jre-jammy
 
 # 필수 패키지 및 Chrome 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -67,17 +67,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libu2f-udev \
     libvulkan1 \
     dbus \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Chrome 설치
+# Chrome 설치 (안정 버전)
 RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome \
+    && ln -sf /usr/bin/google-chrome-stable /usr/bin/chromium
 
-# Chrome 버전 확인
-RUN google-chrome --version
+# Chrome 버전 확인 및 경로 출력
+RUN echo "Chrome installed at: $(which google-chrome)" && google-chrome --version
+
+# /dev/shm 크기 문제 해결을 위한 설정
+RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
 
 WORKDIR /app
 

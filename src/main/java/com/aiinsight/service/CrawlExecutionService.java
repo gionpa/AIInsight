@@ -66,8 +66,28 @@ public class CrawlExecutionService {
         // crawlType에 따라 적절한 크롤러 선택
         CrawlResult result;
         if (target.getCrawlType() == CrawlTarget.CrawlType.DYNAMIC) {
-            log.info("DYNAMIC 크롤링 사용 (Selenium): {}", target.getName());
-            result = seleniumCrawler.crawl(target);
+            // Selenium 사용 가능 여부 확인
+            if (seleniumCrawler.isAvailable()) {
+                log.info("DYNAMIC 크롤링 사용 (Selenium): {}", target.getName());
+                result = seleniumCrawler.crawl(target);
+
+                // Selenium 실패 시 Jsoup으로 폴백 시도
+                if (!result.isSuccess() && result.getErrorMessage() != null &&
+                        (result.getErrorMessage().contains("Could not start a new session") ||
+                         result.getErrorMessage().contains("session not created") ||
+                         result.getErrorMessage().contains("unable to connect"))) {
+                    log.warn("Selenium 세션 생성 실패, Jsoup으로 폴백 시도: {}", target.getName());
+                    result = webCrawler.crawl(target);
+                    if (result.isSuccess()) {
+                        log.info("Jsoup 폴백 크롤링 성공: {} - {}개 기사", target.getName(), result.getArticleCount());
+                    }
+                }
+            } else {
+                // Selenium 사용 불가 시 Jsoup으로 폴백
+                log.warn("Selenium 사용 불가 ({}), Jsoup으로 폴백: {}",
+                        seleniumCrawler.getUnavailableReason(), target.getName());
+                result = webCrawler.crawl(target);
+            }
         } else {
             log.info("STATIC 크롤링 사용 (Jsoup): {}", target.getName());
             result = webCrawler.crawl(target);
