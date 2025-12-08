@@ -108,8 +108,9 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
 # 환경변수 설정
-ENV JAVA_OPTS="-Xmx512m -Xms256m"
+ENV JAVA_OPTS="-Xmx512m -Xms256m -Duser.timezone=Asia/Seoul"
 ENV SPRING_PROFILES_ACTIVE=railway
+ENV TZ=Asia/Seoul
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV CHROME_PATH=/usr/bin/google-chrome
 ENV CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu"
