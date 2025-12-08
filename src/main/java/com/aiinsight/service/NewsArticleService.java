@@ -179,11 +179,40 @@ public class NewsArticleService {
         return deleted;
     }
 
+    /**
+     * URL 정규화 - 쿼리 파라미터와 프래그먼트 제거하여 동일 기사 판별
+     */
+    private String normalizeUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return "";
+        }
+        // 쿼리 파라미터 제거
+        int queryIndex = url.indexOf('?');
+        if (queryIndex > 0) {
+            url = url.substring(0, queryIndex);
+        }
+        // 프래그먼트 제거
+        int fragmentIndex = url.indexOf('#');
+        if (fragmentIndex > 0) {
+            url = url.substring(0, fragmentIndex);
+        }
+        // 마지막 슬래시 제거 (일관성 유지)
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        return url.toLowerCase();
+    }
+
+    /**
+     * URL 기반 해시 생성 - 같은 URL은 같은 기사로 판별
+     * (제목이 약간 달라도 URL이 같으면 중복)
+     */
     private String generateHash(String url, String title) {
         try {
-            String input = url + "|" + title;
+            // URL만으로 해시 생성 (정규화된 URL 사용)
+            String normalizedUrl = normalizeUrl(url);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = digest.digest(normalizedUrl.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 알고리즘을 찾을 수 없습니다", e);
