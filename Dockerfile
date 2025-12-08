@@ -94,6 +94,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code \
     && claude --version || echo "Claude CLI installed"
 
+# Claude CLI 설정 디렉토리 및 onboarding 완료 설정
+# CLAUDE_CODE_OAUTH_TOKEN 환경변수와 함께 사용
+RUN mkdir -p /root/.claude && \
+    echo '{"hasCompletedOnboarding": true}' > /root/.claude.json
+
 WORKDIR /app
 
 # JAR 복사
