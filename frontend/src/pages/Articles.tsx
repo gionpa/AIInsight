@@ -232,12 +232,17 @@ export default function Articles() {
               <div className="flex justify-between items-center text-xs text-gray-500">
                 <span>{article.targetName}</span>
                 <span>
-                  {new Date(article.publishedAt || article.crawledAt).toLocaleString('ko-KR', {
+                  {new Date(
+                    article.publishedAt && !isNaN(new Date(article.publishedAt).getTime())
+                      ? article.publishedAt
+                      : article.crawledAt
+                  ).toLocaleString('ko-KR', {
+                    timeZone: 'Asia/Seoul',
                     year: 'numeric',
                     month: '2-digit',
                     day: '2-digit',
                     hour: '2-digit',
-                    minute: '2-digit'
+                    minute: '2-digit',
                   })}
                 </span>
               </div>
@@ -337,18 +342,28 @@ export default function Articles() {
                   )}
                 </div>
 
-                <div className="flex gap-4 text-sm text-gray-500 mb-6">
+                <div className="flex gap-4 text-sm text-gray-500 mb-6 flex-wrap">
                   <span>출처: {articleDetail.targetName}</span>
                   {articleDetail.author && <span>작성자: {articleDetail.author}</span>}
-                  {articleDetail.publishedAt && (
-                    <span>게시일: {new Date(articleDetail.publishedAt).toLocaleString('ko-KR', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}</span>
-                  )}
+                  <span>
+                    {articleDetail.publishedAt && !isNaN(new Date(articleDetail.publishedAt).getTime())
+                      ? `게시일: ${new Date(articleDetail.publishedAt).toLocaleString('ko-KR', {
+                          timeZone: 'Asia/Seoul',
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}`
+                      : `수집일: ${new Date(articleDetail.crawledAt).toLocaleString('ko-KR', {
+                          timeZone: 'Asia/Seoul',
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}`}
+                  </span>
                 </div>
 
                 {articleDetail.summary && (
