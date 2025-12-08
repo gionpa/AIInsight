@@ -2,11 +2,14 @@ import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-// Helper function to set cookie
+// Helper function to set cookie with proper attributes
 function setCookie(name: string, value: string, days: number) {
   const expires = new Date();
   expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
-  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+  const isSecure = window.location.protocol === 'https:';
+  const sameSite = isSecure ? 'None' : 'Lax';
+  const secureFlag = isSecure ? ';Secure' : '';
+  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=${sameSite}${secureFlag}`;
 }
 
 export default function LoginCallbackPage() {

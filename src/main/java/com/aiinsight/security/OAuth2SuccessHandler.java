@@ -1,17 +1,19 @@
 package com.aiinsight.security;
 
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.Duration;
 
 @Slf4j
 @Component
@@ -37,21 +39,25 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         log.info("OAuth2 login success: userId={}, name={}",
                 oAuth2User.getUser().getId(), oAuth2User.getUser().getName());
 
-        // Set access token cookie
-        Cookie accessTokenCookie = new Cookie("accessToken", accessToken);
-        accessTokenCookie.setHttpOnly(true);
-        accessTokenCookie.setSecure(cookieSecure); // true for HTTPS (production), false for HTTP (local)
-        accessTokenCookie.setPath("/");
-        accessTokenCookie.setMaxAge(3600); // 1 hour
-        response.addCookie(accessTokenCookie);
+        // Set access token cookie with SameSite attribute
+        ResponseCookie accessTokenCookie = ResponseCookie.from("accessToken", accessToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/")
+                .maxAge(Duration.ofHours(1))
+                .sameSite(cookieSecure ? "None" : "Lax") // None for HTTPS (cross-site), Lax for HTTP (local)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, accessTokenCookie.toString());
 
-        // Set refresh token cookie
-        Cookie refreshTokenCookie = new Cookie("refreshToken", refreshToken);
-        refreshTokenCookie.setHttpOnly(true);
-        refreshTokenCookie.setSecure(cookieSecure); // true for HTTPS (production), false for HTTP (local)
-        refreshTokenCookie.setPath("/");
-        refreshTokenCookie.setMaxAge(604800); // 7 days
-        response.addCookie(refreshTokenCookie);
+        // Set refresh token cookie with SameSite attribute
+        ResponseCookie refreshTokenCookie = ResponseCookie.from("refreshToken", refreshToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/")
+                .maxAge(Duration.ofDays(7))
+                .sameSite(cookieSecure ? "None" : "Lax")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString());
 
         // Redirect to frontend with tokens (for cross-port cookie issue in development)
         String targetUrl = frontendUrl + "/login/callback?success=true&accessToken=" + accessToken + "&refreshToken=" + refreshToken;
