@@ -116,6 +116,12 @@ public class AiSummaryService {
         String content = article.getContent();
         String url = article.getOriginalUrl();
 
+        // 이미지/미디어 URL인 경우 분석 건너뛰기
+        if (isMediaUrl(url)) {
+            log.warn("미디어 파일 URL 분석 건너뜀 (기사 ID: {}): {}", article.getId(), url);
+            return;
+        }
+
         // 제목이 없거나 일반적인 제목인 경우 URL에서 정보 추출 시도
         boolean needMetadataFetch = (title == null || title.isEmpty() || isGenericTitle(title));
         String[] metadata = null;
@@ -473,6 +479,34 @@ public class AiSummaryService {
                 .replace("&#x27;", "'")
                 .replace("&hellip;", "...")
                 .replace("&nbsp;", " ");
+    }
+
+    /**
+     * URL이 이미지/미디어 파일인지 확인
+     */
+    private boolean isMediaUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return false;
+        }
+        String lowerUrl = url.toLowerCase();
+        // 이미지 확장자
+        String[] mediaExtensions = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+                                    ".bmp", ".tiff", ".mp4", ".mp3", ".wav", ".avi", ".mov", ".pdf"};
+        for (String ext : mediaExtensions) {
+            if (lowerUrl.endsWith(ext) || lowerUrl.contains(ext + "?")) {
+                return true;
+            }
+        }
+        // 일반적인 이미지 호스팅 패턴
+        String[] mediaPatterns = {"/wp-content/uploads/", "/images/", "/media/",
+                                  "cdn.images.", "img.", "image.", "static/images"};
+        for (String pattern : mediaPatterns) {
+            if (lowerUrl.contains(pattern) && (lowerUrl.endsWith(".png") || lowerUrl.endsWith(".jpg")
+                    || lowerUrl.endsWith(".jpeg") || lowerUrl.endsWith(".gif") || lowerUrl.endsWith(".webp"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

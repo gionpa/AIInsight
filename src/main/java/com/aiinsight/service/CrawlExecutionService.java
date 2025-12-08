@@ -105,6 +105,12 @@ public class CrawlExecutionService {
                     continue;
                 }
 
+                // 이미지/미디어 URL 필터링
+                if (isMediaUrl(url)) {
+                    log.warn("미디어 파일 URL 건너뜀: {}", url);
+                    continue;
+                }
+
                 // 중복 체크 후 저장
                 if (!newsArticleService.existsByHash(url, title)) {
                     NewsArticle saved = newsArticleService.save(
@@ -164,5 +170,24 @@ public class CrawlExecutionService {
         }
 
         log.info("전체 크롤링 완료");
+    }
+
+    /**
+     * URL이 이미지/미디어 파일인지 확인
+     */
+    private boolean isMediaUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return false;
+        }
+        String lowerUrl = url.toLowerCase();
+        // 이미지 확장자
+        String[] mediaExtensions = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+                                    ".bmp", ".tiff", ".mp4", ".mp3", ".wav", ".avi", ".mov", ".pdf"};
+        for (String ext : mediaExtensions) {
+            if (lowerUrl.endsWith(ext) || lowerUrl.contains(ext + "?")) {
+                return true;
+            }
+        }
+        return false;
     }
 }
