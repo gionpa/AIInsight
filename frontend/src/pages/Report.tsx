@@ -9,6 +9,7 @@ import {
   updateInterestTopic,
   deleteInterestTopic,
   initializeDefaultTopics,
+  generateTodayReport,
 } from '../api';
 import {
   FileText,
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   Sparkles,
   BarChart3,
+  Loader2,
 } from 'lucide-react';
 import type { CategoryReport, ArticleSummary, InterestTopic, TopicReportResponse, NewsArticle } from '../types';
 
@@ -544,8 +546,9 @@ function TopicManageModal({
 export default function Report() {
   const [viewMode, setViewMode] = useState<'daily' | 'category' | 'topics'>('daily');
   const [showTopicManager, setShowTopicManager] = useState(false);
+  const queryClient = useQueryClient();
 
-  const { data: dailyReport, isLoading: isDailyLoading } = useQuery({
+  const { data: dailyReport, isLoading: isDailyLoading, refetch: refetchDailyReport } = useQuery({
     queryKey: ['phase3DailyReport'],
     queryFn: getPhase3DailyReport,
     enabled: viewMode === 'daily',
@@ -568,6 +571,14 @@ export default function Report() {
     queryFn: getInterestTopics,
   });
 
+  const generateReportMutation = useMutation({
+    mutationFn: generateTodayReport,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['phase3DailyReport'] });
+      refetchDailyReport();
+    },
+  });
+
   const isLoading =
     (viewMode === 'daily' && isDailyLoading) ||
     (viewMode === 'category' && isCategoryLoading) ||
@@ -576,6 +587,10 @@ export default function Report() {
   const handleRefresh = () => {
     refetchTopics();
     refetchTopicsReport();
+  };
+
+  const handleGenerateReport = () => {
+    generateReportMutation.mutate();
   };
 
   return (
@@ -654,9 +669,53 @@ export default function Report() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+      {/* Daily Report Generate Button */}
+      {viewMode === 'daily' && (
+        <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-6 h-6 text-orange-600" />
+            <div>
+              <h2 className="font-semibold text-gray-900">일일 AI 리포트</h2>
+              <p className="text-sm text-gray-500">
+                최근 하루 수집된 기사를 기반으로 임베딩 기반 분석 리포트를 생성합니다
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleGenerateReport}
+            disabled={generateReportMutation.isPending}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors ${
+              generateReportMutation.isPending
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-600 hover:to-red-600'
+            }`}
+          >
+            {generateReportMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                생성 중...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                리포트 생성
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {isLoading || generateReportMutation.isPending ? (
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-red-600" />
+          {generateReportMutation.isPending && (
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900">리포트 생성 중...</p>
+              <p className="text-sm text-gray-500 mt-1">
+                AI가 기사를 분석하고 토픽 클러스터링을 수행하고 있습니다
+              </p>
+            </div>
+          )}
         </div>
       ) : viewMode === 'daily' && dailyReport ? (
         <div className="space-y-6">

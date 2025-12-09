@@ -143,6 +143,9 @@ export const getCategoryReport = () =>
 export const getReportByCategory = (category: string) =>
   apiClient.get<CategoryReport>(`/reports/category/${category}`).then((res) => res.data);
 
+export const generateTodayReport = () =>
+  apiClient.post<Phase3DailyReport>('/reports/generate/today').then((res) => res.data);
+
 // Interest Topics
 export const getInterestTopics = () =>
   apiClient.get<InterestTopic[]>('/interest-topics').then((res) => res.data);
