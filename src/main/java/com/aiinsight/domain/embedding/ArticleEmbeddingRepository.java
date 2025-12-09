@@ -1,5 +1,6 @@
 package com.aiinsight.domain.embedding;
 
+import com.aiinsight.domain.article.NewsArticle;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,10 +19,31 @@ public interface ArticleEmbeddingRepository extends JpaRepository<ArticleEmbeddi
     Optional<ArticleEmbedding> findByArticleId(Long articleId);
 
     /**
+     * 기사 엔티티로 임베딩 조회
+     */
+    Optional<ArticleEmbedding> findByArticle(NewsArticle article);
+
+    /**
+     * 기사에 대한 임베딩 존재 여부 확인
+     */
+    boolean existsByArticle(NewsArticle article);
+
+    /**
      * 임베딩이 없는 기사 ID 목록 조회
      */
     @Query("SELECT a.id FROM NewsArticle a WHERE a.id NOT IN (SELECT ae.article.id FROM ArticleEmbedding ae)")
     List<Long> findArticleIdsWithoutEmbedding();
+
+    /**
+     * 임베딩이 없는 기사 엔티티 목록 조회 (제한 개수)
+     */
+    @Query(value = """
+        SELECT na.* FROM news_article na
+        WHERE na.id NOT IN (SELECT ae.article_id FROM article_embedding ae)
+        ORDER BY na.published_at DESC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<NewsArticle> findArticlesWithoutEmbedding(@Param("limit") int limit);
 
     /**
      * 특정 기간 내 생성된 임베딩 조회
