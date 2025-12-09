@@ -54,7 +54,12 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, Long> 
     List<DailyReport> findByQualityScoreGreaterThanEqualOrderByReportDateDesc(Double minQualityScore);
 
     /**
-     * 최신 리포트 조회
+     * 최신 리포트 조회 (상태 무관)
+     */
+    Optional<DailyReport> findTopByOrderByReportDateDesc();
+
+    /**
+     * 최신 리포트 조회 (상태 지정)
      */
     Optional<DailyReport> findFirstByStatusOrderByReportDateDesc(DailyReport.ReportStatus status);
 

@@ -29,6 +29,15 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
 
     Page<NewsArticle> findByImportanceOrderByCrawledAtDesc(NewsArticle.ArticleImportance importance, Pageable pageable);
 
+    /**
+     * 중요도 및 발행일 범위로 기사 조회 (일일 리포트용)
+     */
+    List<NewsArticle> findByImportanceAndPublishedAtBetween(
+            NewsArticle.ArticleImportance importance,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    );
+
     @Query("SELECT na FROM NewsArticle na WHERE na.isSummarized = false ORDER BY na.crawledAt ASC")
     List<NewsArticle> findUnsummarizedArticles(Pageable pageable);
 
