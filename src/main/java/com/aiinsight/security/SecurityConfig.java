@@ -60,7 +60,10 @@ public class SecurityConfig {
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
                                 "/api/ai-test/**",
-                                "/api/reports/**"
+                                "/api/reports/**",
+                                "/api/crawl/**",
+                                "/api/dashboard/**",
+                                "/api/news-articles/**"
                         ).permitAll()
                         // All other API endpoints require authentication
                         .requestMatchers("/api/**").authenticated()
