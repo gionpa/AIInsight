@@ -3,10 +3,10 @@ spring:
     name: aiinsight
 
   datasource:
-    # Railway 외부 프록시 직접 설정 (환경변수 오버라이드 가능)
-    url: jdbc:postgresql://yamanote.proxy.rlwy.net:51273/railway
-    username: postgres
-    password: yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg
+    # Railway pgvector 서비스 연결 (환경변수로 오버라이드)
+    url: jdbc:postgresql://${PGVECTOR_HOST:turntable.proxy.rlwy.net}:${PGVECTOR_PORT:45703}/${PGVECTOR_DATABASE:railway}
+    username: ${PGVECTOR_USERNAME:postgres}
+    password: ${PGVECTOR_PASSWORD:G7W~ho3HCzXkqFxfVygi0kJVsgLsjl9y}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 5
