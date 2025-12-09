@@ -50,32 +50,48 @@ public class DailyReportService {
             return existingReport.get();
         }
 
-        // 2. 해당 날짜의 HIGH 중요도 기사 조회
+        // 2. 해당 날짜의 HIGH 중요도 기사 조회 (crawledAt 기준)
         LocalDateTime startOfDay = targetDate.atStartOfDay();
         LocalDateTime endOfDay = targetDate.plusDays(1).atStartOfDay();
 
-        List<NewsArticle> highImportanceArticles = articleRepository.findByImportanceAndPublishedAtBetween(
+        // crawledAt 기준으로 조회 (publishedAt은 null이거나 과거일 수 있음)
+        List<NewsArticle> highImportanceArticles = articleRepository.findByImportanceAndCrawledAtBetween(
                 NewsArticle.ArticleImportance.HIGH,
                 startOfDay,
                 endOfDay
         );
 
-        log.info("HIGH 중요도 기사 수: {}", highImportanceArticles.size());
+        log.info("HIGH 중요도 기사 수 (crawledAt 기준): {}", highImportanceArticles.size());
 
         if (highImportanceArticles.isEmpty()) {
             log.warn("HIGH 중요도 기사가 없어 리포트 생성 불가: {}", targetDate);
             return null;
         }
 
-        // 3. 임베딩이 있는 기사만 필터링
+        // 3. 임베딩이 있는 기사만 필터링 (없으면 자동 생성 시도)
         List<NewsArticle> articlesWithEmbedding = highImportanceArticles.stream()
-                .filter(article -> embeddingRepository.existsByArticle(article))
+                .filter(article -> {
+                    // 임베딩이 있는지 확인
+                    if (embeddingRepository.existsByArticle(article)) {
+                        return true;
+                    }
+
+                    // 임베딩이 없으면 자동 생성 시도
+                    log.info("기사 ID {}에 임베딩이 없어 자동 생성 시도", article.getId());
+                    try {
+                        embeddingService.generateAndSaveEmbedding(article);
+                        return embeddingRepository.existsByArticle(article);
+                    } catch (Exception e) {
+                        log.error("기사 ID {} 임베딩 생성 실패: {}", article.getId(), e.getMessage());
+                        return false;
+                    }
+                })
                 .collect(Collectors.toList());
 
-        log.info("임베딩이 있는 기사 수: {}", articlesWithEmbedding.size());
+        log.info("임베딩이 있는 기사 수 (자동 생성 포함): {}", articlesWithEmbedding.size());
 
         if (articlesWithEmbedding.isEmpty()) {
-            log.warn("임베딩이 있는 기사가 없어 리포트 생성 불가: {}", targetDate);
+            log.warn("임베딩이 있는 기사가 없어 리포트 생성 불가: {} (자동 생성도 실패)", targetDate);
             return null;
         }
 

@@ -38,6 +38,15 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
             LocalDateTime endDate
     );
 
+    /**
+     * 중요도 및 크롤링일 범위로 기사 조회 (일일 리포트용 - crawledAt 기준)
+     */
+    List<NewsArticle> findByImportanceAndCrawledAtBetween(
+            NewsArticle.ArticleImportance importance,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    );
+
     @Query("SELECT na FROM NewsArticle na WHERE na.isSummarized = false ORDER BY na.crawledAt ASC")
     List<NewsArticle> findUnsummarizedArticles(Pageable pageable);
 
