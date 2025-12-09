@@ -25,6 +25,13 @@ public class AsyncConfig {
         executor.setMaxPoolSize(5);       // 최대 스레드 수
         executor.setQueueCapacity(100);   // 대기 큐 크기
         executor.setThreadNamePrefix("ai-analysis-");
+
+        // 우아한 종료 설정 - 리소스 누수 방지
+        executor.setWaitForTasksToCompleteOnShutdown(true);  // 종료 시 실행 중인 작업 완료 대기
+        executor.setAwaitTerminationSeconds(30);              // 최대 30초 대기
+        executor.setAllowCoreThreadTimeOut(true);             // 유휴 스레드 타임아웃 허용
+        executor.setKeepAliveSeconds(60);                     // 유휴 스레드 60초 후 종료
+
         executor.setRejectedExecutionHandler((r, e) -> {
             log.warn("AI 분석 작업 큐가 가득 찼습니다. 작업이 거부되었습니다.");
         });

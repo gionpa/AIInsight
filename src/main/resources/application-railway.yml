@@ -12,9 +12,10 @@ spring:
       maximum-pool-size: 5
       minimum-idle: 1
       connection-timeout: 30000
-      idle-timeout: 300000
-      max-lifetime: 900000
+      idle-timeout: 300000          # 5분 (유휴 연결 유지)
+      max-lifetime: 300000           # 5분 (Railway 환경 최적화: 15분 → 5분)
       connection-test-query: SELECT 1
+      leak-detection-threshold: 60000  # 연결 누수 감지 (60초)
 
   jpa:
     hibernate:
@@ -44,7 +45,7 @@ spring:
           max-active: 4
           max-idle: 2
           min-idle: 0
-        shutdown-timeout: 100ms
+        shutdown-timeout: 5000ms  # Railway 환경 최적화: 100ms → 5000ms (5초)
       # Redis Repository 비활성화 (JPA만 사용)
       repositories:
         enabled: false

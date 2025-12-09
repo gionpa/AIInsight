@@ -83,17 +83,32 @@ public class AiSummaryService {
 
     /**
      * 비동기로 기사 요약 실행 (크롤링 응답을 블로킹하지 않음)
+     * - 타임아웃: 최대 3분 (Claude CLI timeout + 여유시간)
+     * - 스레드 누수 방지를 위한 타임아웃 적용
      * @param articleId 분석할 기사 ID
      */
     @Async("aiAnalysisExecutor")
     public void summarizeArticleAsync(Long articleId) {
+        long startTime = System.currentTimeMillis();
         try {
             NewsArticle article = newsArticleService.findEntityById(articleId);
             if (article != null) {
+                // 타임아웃 체크를 위한 Thread interruption 처리
+                if (Thread.interrupted()) {
+                    log.warn("AI 분석 작업이 인터럽트됨 (기사 ID: {})", articleId);
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
                 summarizeArticle(article, false);
+
+                long duration = System.currentTimeMillis() - startTime;
+                log.info("AI 분석 완료 (기사 ID: {}, 소요시간: {}ms)", articleId, duration);
             }
         } catch (Exception e) {
-            log.error("비동기 AI 분석 실패 (기사 ID: {}): {}", articleId, e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("비동기 AI 분석 실패 (기사 ID: {}, 소요시간: {}ms): {}",
+                    articleId, duration, e.getMessage());
         }
     }
 

@@ -144,7 +144,15 @@ public class SeleniumCrawler {
                 try {
                     driver.quit();
                 } catch (Exception e) {
-                    log.warn("WebDriver 종료 중 오류: {}", e.getMessage());
+                    log.error("WebDriver 정상 종료 실패, 강제 종료 시도: {}", e.getMessage());
+                    try {
+                        // 강제 종료 시도
+                        ((ChromeDriver) driver).quit();
+                        // ChromeDriver 프로세스 강제 종료
+                        killChromeProcesses();
+                    } catch (Exception ex) {
+                        log.error("WebDriver 강제 종료 실패: {}", ex.getMessage());
+                    }
                 }
             }
         }
@@ -443,5 +451,42 @@ public class SeleniumCrawler {
             log.error("선택자 설정 파싱 실패: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * ChromeDriver 좀비 프로세스 강제 종료
+     * - quit() 실패 시 남아있는 chrome/chromedriver 프로세스 정리
+     */
+    private void killChromeProcesses() {
+        try {
+            String os = System.getProperty("os.name").toLowerCase();
+            ProcessBuilder processBuilder;
+
+            if (os.contains("win")) {
+                // Windows
+                processBuilder = new ProcessBuilder("taskkill", "/F", "/IM", "chrome.exe", "/T");
+                processBuilder.start();
+                processBuilder = new ProcessBuilder("taskkill", "/F", "/IM", "chromedriver.exe", "/T");
+                processBuilder.start();
+            } else {
+                // Linux/Unix (Railway 환경)
+                processBuilder = new ProcessBuilder("pkill", "-9", "-f", "chrome");
+                processBuilder.start();
+                processBuilder = new ProcessBuilder("pkill", "-9", "-f", "chromedriver");
+                processBuilder.start();
+            }
+            log.info("Chrome 프로세스 강제 종료 명령 실행");
+        } catch (Exception e) {
+            log.warn("Chrome 프로세스 강제 종료 실패: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 애플리케이션 종료 시 모든 Chrome 프로세스 정리
+     */
+    @PreDestroy
+    public void cleanup() {
+        log.info("SeleniumCrawler 종료 - Chrome 프로세스 정리 중...");
+        killChromeProcesses();
     }
 }
