@@ -50,18 +50,18 @@ public class DailyReportService {
             reportRepository.delete(existingReport.get());
         }
 
-        // 2. 해당 날짜의 HIGH 중요도 기사 조회 (crawledAt 기준)
-        LocalDateTime startOfDay = targetDate.atStartOfDay();
+        // 2. 최근 3일간의 HIGH 중요도 기사 조회 (crawledAt 기준)
         LocalDateTime endOfDay = targetDate.plusDays(1).atStartOfDay();
+        LocalDateTime startOfPeriod = targetDate.minusDays(2).atStartOfDay(); // 3일 전부터
 
         // crawledAt 기준으로 조회 (publishedAt은 null이거나 과거일 수 있음)
         List<NewsArticle> highImportanceArticles = articleRepository.findByImportanceAndCrawledAtBetween(
                 NewsArticle.ArticleImportance.HIGH,
-                startOfDay,
+                startOfPeriod,
                 endOfDay
         );
 
-        log.info("HIGH 중요도 기사 수 (crawledAt 기준): {}", highImportanceArticles.size());
+        log.info("HIGH 중요도 기사 수 (최근 3일, crawledAt 기준): {}", highImportanceArticles.size());
 
         if (highImportanceArticles.isEmpty()) {
             log.warn("HIGH 중요도 기사가 없어 리포트 생성 불가: {}", targetDate);
