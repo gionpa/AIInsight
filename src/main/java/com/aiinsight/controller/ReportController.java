@@ -50,8 +50,40 @@ public class ReportController {
             DailyReportResponse response = DailyReportResponse.fromEntity(report.get());
             return ResponseEntity.ok(response);
         } else {
-            return ResponseEntity.notFound().build();
+            // 리포트가 없으면 오늘 리포트를 자동 생성
+            try {
+                LocalDate today = LocalDate.now();
+                DailyReport newReport = dailyReportService.generateDailyReport(today);
+
+                if (newReport != null) {
+                    DailyReportResponse response = DailyReportResponse.fromEntity(newReport);
+                    return ResponseEntity.ok(response);
+                } else {
+                    // 생성 실패 시 빈 응답 반환
+                    return ResponseEntity.ok(createEmptyReport());
+                }
+            } catch (Exception e) {
+                // 예외 발생 시 빈 응답 반환
+                return ResponseEntity.ok(createEmptyReport());
+            }
         }
+    }
+
+    /**
+     * 빈 리포트 응답 생성
+     */
+    private DailyReportResponse createEmptyReport() {
+        return DailyReportResponse.builder()
+                .id(0L)
+                .reportDate(LocalDate.now())
+                .executiveSummary("아직 생성된 리포트가 없습니다. 기사가 수집되면 자동으로 리포트가 생성됩니다.")
+                .keyTrends(List.of())
+                .topicSummaries(List.of())
+                .totalArticles(0)
+                .highImportanceArticles(0)
+                .status("PENDING")
+                .generatedAt(LocalDate.now().atStartOfDay())
+                .build();
     }
 
     /**
