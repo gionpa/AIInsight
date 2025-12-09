@@ -24,6 +24,7 @@ public class CrawlExecutionService {
     private final NewsArticleService newsArticleService;
     private final CrawlHistoryService crawlHistoryService;
     private final AiSummaryService aiSummaryService;
+    private final EmbeddingService embeddingService;
 
     @Transactional
     public CrawlResult executeCrawl(Long targetId) {

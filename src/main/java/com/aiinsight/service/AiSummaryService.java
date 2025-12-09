@@ -31,6 +31,7 @@ public class AiSummaryService {
 
     private final AiConfig aiConfig;
     private final NewsArticleService newsArticleService;
+    private final EmbeddingService embeddingService;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -104,6 +105,14 @@ public class AiSummaryService {
 
                 long duration = System.currentTimeMillis() - startTime;
                 log.info("AI 분석 완료 (기사 ID: {}, 소요시간: {}ms)", articleId, duration);
+
+                // AI 분석 완료 후 임베딩 생성
+                try {
+                    embeddingService.generateAndSaveEmbedding(article);
+                    log.info("임베딩 생성 완료 (기사 ID: {})", articleId);
+                } catch (Exception embeddingError) {
+                    log.error("임베딩 생성 실패 (기사 ID: {}): {}", articleId, embeddingError.getMessage());
+                }
             }
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
