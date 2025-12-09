@@ -156,10 +156,16 @@ public class ReportController {
                 DailyReportResponse response = DailyReportResponse.fromEntity(report);
                 return ResponseEntity.status(HttpStatus.CREATED).body(response);
             } else {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+                // 기사가 없거나 임베딩이 없는 경우 - 빈 리포트 반환
+                DailyReportResponse emptyReport = createEmptyReport();
+                emptyReport.setExecutiveSummary("오늘 날짜의 HIGH 중요도 기사가 없거나 임베딩이 생성되지 않았습니다. 기사 수집 후 다시 시도해주세요.");
+                return ResponseEntity.ok(emptyReport);
             }
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            // 예외 발생 시에도 빈 리포트 반환
+            DailyReportResponse emptyReport = createEmptyReport();
+            emptyReport.setExecutiveSummary("리포트 생성 중 오류가 발생했습니다: " + e.getMessage());
+            return ResponseEntity.ok(emptyReport);
         }
     }
 
