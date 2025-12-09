@@ -210,6 +210,14 @@ public class AiSummaryService {
 
             if (response != null) {
                 parseSummaryResponse(article.getId(), response);
+
+                // AI 분석 완료 후 임베딩 생성
+                try {
+                    embeddingService.generateAndSaveEmbedding(article);
+                    log.info("임베딩 생성 완료 (기사 ID: {})", article.getId());
+                } catch (Exception embeddingError) {
+                    log.error("임베딩 생성 실패 (기사 ID: {}): {}", article.getId(), embeddingError.getMessage());
+                }
             }
         } catch (Exception e) {
             log.error("AI 요약 실패: {} - {}", article.getId(), e.getMessage());

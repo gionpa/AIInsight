@@ -8,8 +8,8 @@ podman network exists aiinsight-net 2>/dev/null || podman network create aiinsig
 # 기존 컨테이너 정리
 podman rm -f aiinsight-postgres aiinsight-redis 2>/dev/null
 
-# PostgreSQL 컨테이너 시작
-echo ">>> PostgreSQL 시작 중..."
+# PostgreSQL + pgvector 컨테이너 시작
+echo ">>> PostgreSQL + pgvector 시작 중..."
 podman run -d \
   --name aiinsight-postgres \
   --network aiinsight-net \
@@ -19,7 +19,7 @@ podman run -d \
   -p 5432:5432 \
   -v aiinsight_postgres_data:/var/lib/postgresql/data \
   --restart unless-stopped \
-  postgres:16-alpine
+  pgvector/pgvector:pg16
 
 # Redis 컨테이너 시작
 echo ">>> Redis 시작 중..."
