@@ -43,11 +43,11 @@ public class DailyReportService {
     public DailyReport generateDailyReport(LocalDate targetDate) {
         log.info("일일 리포트 생성 시작: {}", targetDate);
 
-        // 1. 이미 생성된 리포트가 있는지 확인
+        // 1. 이미 생성된 리포트가 있으면 삭제 (재생성 허용)
         Optional<DailyReport> existingReport = reportRepository.findByReportDate(targetDate);
         if (existingReport.isPresent()) {
-            log.info("이미 생성된 리포트 존재: {}", targetDate);
-            return existingReport.get();
+            log.info("기존 리포트 삭제 후 재생성: {}", targetDate);
+            reportRepository.delete(existingReport.get());
         }
 
         // 2. 해당 날짜의 HIGH 중요도 기사 조회 (crawledAt 기준)
