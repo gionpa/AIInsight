@@ -27,20 +27,14 @@ public class ReportController {
     private final DailyReportService dailyReportService;
 
     /**
-     * Phase 3: 최신 일일 리포트 조회
+     * Phase 3: 최신 일일 리포트 조회 (레거시 형식)
      * GET /api/reports/latest
      */
     @GetMapping("/latest")
-    @Operation(summary = "최신 리포트 조회", description = "가장 최근에 생성된 일일 리포트를 반환합니다")
-    public ResponseEntity<DailyReportResponse> getLatestReport() {
-        Optional<DailyReport> report = dailyReportService.getLatestReport();
-
-        if (report.isPresent()) {
-            DailyReportResponse response = DailyReportResponse.fromEntity(report.get());
-            return ResponseEntity.ok(response);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+    @Operation(summary = "최신 리포트 조회", description = "가장 최근에 생성된 일일 리포트를 레거시 형식으로 반환합니다")
+    public ResponseEntity<ReportDto.DailyReport> getLatestReport() {
+        // 레거시 ReportService 사용
+        return ResponseEntity.ok(reportService.generateDailyReport());
     }
 
     /**

@@ -129,9 +129,9 @@ export const refreshScheduler = () =>
 export const getSchedulerStatus = () =>
   apiClient.get('/scheduler/status').then((res) => res.data);
 
-// Reports
+// Reports (Phase 3: Updated endpoints)
 export const getDailyReport = () =>
-  apiClient.get<DailyReport>('/reports/daily').then((res) => res.data);
+  apiClient.get<DailyReport>('/reports/latest').then((res) => res.data);
 
 export const getCategoryReport = () =>
   apiClient.get<CategoryReport[]>('/reports/by-category').then((res) => res.data);
