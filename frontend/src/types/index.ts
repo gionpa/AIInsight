@@ -131,6 +131,30 @@ export interface DailyReport {
   executiveSummary: string;
 }
 
+// Phase 3: 임베딩 기반 토픽 클러스터링 리포트
+export interface Phase3DailyReport {
+  id: number;
+  reportDate: string;  // yyyy-MM-dd
+  executiveSummary: string;
+  keyTrends: KeyTrend[];
+  topicSummaries: TopicSummary[];
+  totalArticles: number;
+  highImportanceArticles: number;
+  status: 'PENDING' | 'COMPLETED' | 'FAILED';
+  generatedAt: string;  // yyyy-MM-dd'T'HH:mm:ss
+}
+
+export interface KeyTrend {
+  keyword: string;
+  frequency: number;
+}
+
+export interface TopicSummary {
+  topic: string;
+  articleCount: number;
+  representativeTitles: string[];
+}
+
 export interface ArticleSummary {
   id: number;
   title: string;           // 한글 제목 (titleKo 우선)

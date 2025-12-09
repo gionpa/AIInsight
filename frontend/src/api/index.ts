@@ -11,6 +11,7 @@ import type {
   CrawlResult,
   ArticleCategory,
   DailyReport,
+  Phase3DailyReport,
   CategoryReport,
   InterestTopic,
   CreateInterestTopicRequest,
@@ -132,6 +133,9 @@ export const getSchedulerStatus = () =>
 // Reports (Phase 3: Updated endpoints)
 export const getDailyReport = () =>
   apiClient.get<DailyReport>('/reports/latest').then((res) => res.data);
+
+export const getPhase3DailyReport = () =>
+  apiClient.get<Phase3DailyReport>('/reports/latest-phase3').then((res) => res.data);
 
 export const getCategoryReport = () =>
   apiClient.get<CategoryReport[]>('/reports/by-category').then((res) => res.data);

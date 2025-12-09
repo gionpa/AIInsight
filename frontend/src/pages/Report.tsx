@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  getDailyReport,
+  getPhase3DailyReport,
   getCategoryReport,
   getAllTopicsReport,
   getInterestTopics,
@@ -12,7 +12,6 @@ import {
 } from '../api';
 import {
   FileText,
-  AlertCircle,
   TrendingUp,
   ExternalLink,
   Clock,
@@ -27,6 +26,8 @@ import {
   X,
   Save,
   RefreshCw,
+  Sparkles,
+  BarChart3,
 } from 'lucide-react';
 import type { CategoryReport, ArticleSummary, InterestTopic, TopicReportResponse, NewsArticle } from '../types';
 
@@ -545,8 +546,8 @@ export default function Report() {
   const [showTopicManager, setShowTopicManager] = useState(false);
 
   const { data: dailyReport, isLoading: isDailyLoading } = useQuery({
-    queryKey: ['dailyReport'],
-    queryFn: getDailyReport,
+    queryKey: ['phase3DailyReport'],
+    queryFn: getPhase3DailyReport,
     enabled: viewMode === 'daily',
   });
 
@@ -662,9 +663,12 @@ export default function Report() {
           {/* Executive Summary */}
           <div className="bg-gradient-to-r from-red-600 to-orange-500 rounded-xl p-6 text-white">
             <div className="flex items-start gap-4">
-              <AlertCircle className="w-8 h-8 flex-shrink-0 mt-1" />
+              <Sparkles className="w-8 h-8 flex-shrink-0 mt-1" />
               <div>
-                <h2 className="text-lg font-semibold mb-2">Executive Summary</h2>
+                <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                  <span>Executive Summary</span>
+                  <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">AI 분석</span>
+                </h2>
                 <p className="text-red-100 leading-relaxed">{dailyReport.executiveSummary}</p>
               </div>
             </div>
@@ -673,59 +677,114 @@ export default function Report() {
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-              <div className="text-sm text-gray-500 mb-1">중요 기사 수</div>
-              <div className="text-3xl font-bold text-red-600">
-                {dailyReport.totalHighImportanceArticles}
+              <div className="text-sm text-gray-500 mb-1">전체 기사 수</div>
+              <div className="text-3xl font-bold text-blue-600">
+                {dailyReport.totalArticles}
               </div>
             </div>
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-              <div className="text-sm text-gray-500 mb-1">분석된 카테고리</div>
-              <div className="text-3xl font-bold text-blue-600">
-                {Object.keys(dailyReport.categoryDistribution).length}
+              <div className="text-sm text-gray-500 mb-1">중요 기사 수</div>
+              <div className="text-3xl font-bold text-red-600">
+                {dailyReport.highImportanceArticles}
               </div>
             </div>
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
               <div className="text-sm text-gray-500 mb-1">리포트 생성일</div>
               <div className="text-xl font-bold text-gray-700">
-                {dailyReport.period}
+                {new Date(dailyReport.reportDate).toLocaleDateString('ko-KR')}
               </div>
             </div>
           </div>
 
-          {/* Category Distribution */}
-          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-            <h3 className="font-semibold text-gray-900 mb-4">카테고리별 분포</h3>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(dailyReport.categoryDistribution)
-                .sort((a, b) => b[1] - a[1])
-                .map(([category, count]) => (
-                  <span
-                    key={category}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium ${CATEGORY_COLORS[category] || CATEGORY_COLORS.OTHER}`}
-                  >
-                    {category}: {count}건
-                  </span>
-                ))}
+          {/* Key Trends */}
+          {dailyReport.keyTrends && dailyReport.keyTrends.length > 0 && (
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart3 className="w-5 h-5 text-purple-600" />
+                <h3 className="font-semibold text-gray-900">핵심 키워드 트렌드</h3>
+              </div>
+              <div className="space-y-3">
+                {dailyReport.keyTrends
+                  .sort((a, b) => b.frequency - a.frequency)
+                  .slice(0, 10)
+                  .map((trend, index) => {
+                    const maxFreq = dailyReport.keyTrends[0].frequency;
+                    const widthPercent = (trend.frequency / maxFreq) * 100;
+                    return (
+                      <div key={index} className="flex items-center gap-3">
+                        <div className="w-24 text-sm text-gray-600 font-medium">
+                          {trend.keyword}
+                        </div>
+                        <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                            style={{ width: `${widthPercent}%` }}
+                          >
+                            <span className="text-xs font-semibold text-white">
+                              {trend.frequency}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Articles List */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-4 bg-gray-50 border-b">
-              <h3 className="font-semibold text-gray-900">중요 기사 목록</h3>
-            </div>
-            <div className="p-4 space-y-3">
-              {dailyReport.articles.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
-                  분석된 중요 기사가 없습니다.
+          {/* Topic Summaries */}
+          {dailyReport.topicSummaries && dailyReport.topicSummaries.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 bg-gray-50 border-b">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-orange-600" />
+                  <h3 className="font-semibold text-gray-900">토픽 클러스터 분석</h3>
+                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full ml-2">
+                    임베딩 기반
+                  </span>
                 </div>
-              ) : (
-                dailyReport.articles.map((article) => (
-                  <ArticleCard key={article.id} article={article} />
-                ))
-              )}
+                <p className="text-sm text-gray-500 mt-1">
+                  유사한 기사들을 AI가 자동으로 클러스터링하여 대표 기사를 선정했습니다
+                </p>
+              </div>
+              <div className="p-4 space-y-6">
+                {dailyReport.topicSummaries.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    분석된 토픽이 없습니다.
+                  </div>
+                ) : (
+                  dailyReport.topicSummaries.map((topicSummary, index) => (
+                    <div key={index} className="pb-6 border-b border-gray-100 last:border-0">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 text-lg mb-1">
+                            {topicSummary.topic}
+                          </h4>
+                          <div className="text-sm text-gray-500 mb-3">
+                            관련 기사 {topicSummary.articleCount}건
+                          </div>
+                        </div>
+                      </div>
+                      <div className="ml-11 space-y-2">
+                        {topicSummary.representativeTitles.map((title, titleIndex) => (
+                          <div
+                            key={titleIndex}
+                            className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                          >
+                            <span className="text-orange-600 font-bold text-sm mt-0.5">•</span>
+                            <span className="text-sm text-gray-700 leading-relaxed">{title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ) : viewMode === 'category' && categoryReport ? (
         <div className="space-y-4">

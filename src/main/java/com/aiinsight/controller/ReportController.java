@@ -38,6 +38,23 @@ public class ReportController {
     }
 
     /**
+     * Phase 3: 최신 일일 리포트 조회 (Phase 3 형식 - 임베딩 기반 토픽 클러스터링)
+     * GET /api/reports/latest-phase3
+     */
+    @GetMapping("/latest-phase3")
+    @Operation(summary = "최신 리포트 조회 (Phase 3)", description = "임베딩 기반 토픽 클러스터링을 사용한 최신 일일 리포트를 반환합니다")
+    public ResponseEntity<DailyReportResponse> getLatestPhase3Report() {
+        Optional<DailyReport> report = dailyReportService.getLatestReport();
+
+        if (report.isPresent()) {
+            DailyReportResponse response = DailyReportResponse.fromEntity(report.get());
+            return ResponseEntity.ok(response);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
      * Phase 3: 특정 날짜 리포트 조회
      * GET /api/reports/daily?date=2025-12-09
      */
