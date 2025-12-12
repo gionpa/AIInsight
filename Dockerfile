@@ -96,8 +96,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code \
     && claude --version || echo "Claude CLI installed"
 
-# Hugging Face text-embeddings-inference 설치 (CPU) - extras 없이 기본 패키지 사용
-RUN pip install --no-cache-dir "text-embeddings-inference"
+# Hugging Face text-embeddings-inference 설치 (CPU)
+RUN python3 -m pip install --upgrade pip \
+    && python3 -m pip install --no-cache-dir -i https://pypi.org/simple text-embeddings-inference
 
 # Claude CLI 설정 디렉토리 및 onboarding 완료 설정
 # CLAUDE_CODE_OAUTH_TOKEN 환경변수와 함께 사용
