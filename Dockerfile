@@ -119,6 +119,11 @@ ENV TZ=Asia/Seoul
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV CHROME_PATH=/usr/bin/google-chrome
 ENV CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu"
+# Embedding defaults (local-bge on 8081)
+ENV EMBEDDING_PROVIDER=local-bge
+ENV EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+ENV EMBEDDING_DIMENSION=384
+ENV EMBEDDING_ENDPOINT=http://localhost:8081/embeddings
 # Claude CLI 설정
 ENV PATH="/usr/local/bin:$PATH"
 
