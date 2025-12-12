@@ -39,7 +39,8 @@ export default function Articles() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<number | null>(null);
-  const [importanceFilter, setImportanceFilter] = useState<ArticleImportance | 'ALL'>('HIGH');
+  // 기본값 ALL로 설정하여 중요도 미지정 기사도 노출
+  const [importanceFilter, setImportanceFilter] = useState<ArticleImportance | 'ALL'>('ALL');
 
   const { data, isLoading } = useQuery({
     queryKey: ['articles', page, isSearching ? searchKeyword : '', importanceFilter],
@@ -231,6 +232,32 @@ export default function Articles() {
                 <p className="text-sm text-gray-600 line-clamp-2 mb-3">
                   {article.summary}
                 </p>
+              )}
+
+              {/* 분석 상태 뱃지 */}
+              {article.analysisStatus && (
+                <div className="mb-3">
+                  <span
+                    className={
+                      'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' +
+                      (article.analysisStatus === 'PROCESSING'
+                        ? 'bg-blue-100 text-blue-700'
+                        : article.analysisStatus === 'COMPLETED'
+                        ? 'bg-green-100 text-green-700'
+                        : article.analysisStatus === 'FAILED'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700')
+                    }
+                  >
+                    {article.analysisStatus === 'PROCESSING'
+                      ? '분석중'
+                      : article.analysisStatus === 'COMPLETED'
+                      ? '분석 완료'
+                      : article.analysisStatus === 'FAILED'
+                      ? '분석 실패'
+                      : '대기'}
+                  </span>
+                </div>
               )}
 
               <div className="flex flex-wrap gap-2 mb-3">

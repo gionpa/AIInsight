@@ -9,9 +9,9 @@ spring:
     password: ${PGVECTOR_PASSWORD:G7W~ho3HCzXkqFxfVygi0kJVsgLsjl9y}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 30000
+      maximum-pool-size: 15        # 스케줄러 + API 동시 접근 고려
+      minimum-idle: 5
+      connection-timeout: 20000
       idle-timeout: 300000          # 5분 (유휴 연결 유지)
       max-lifetime: 300000           # 5분 (Railway 환경 최적화: 15분 → 5분)
       connection-test-query: SELECT 1
@@ -66,6 +66,12 @@ crawler:
 # AI 요약 설정
 # Railway 환경에서도 Claude CLI 사용 (로컬과 동일)
 ai:
+  embedding:
+    provider: local-bge
+    model: BAAI/bge-small-en-v1.5
+    endpoint: ${EMBEDDING_ENDPOINT:http://localhost:8081/embeddings}
+    dimension: 384
+
   provider: ${AI_PROVIDER:claude-cli}
   openai:
     api-key: ${OPENAI_API_KEY:}

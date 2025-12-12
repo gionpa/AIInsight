@@ -97,6 +97,7 @@ public class NewsArticleService {
                 .publishedAt(publishedAt)
                 .thumbnailUrl(thumbnailUrl)
                 .contentHash(contentHash)
+                .analysisStatus(NewsArticle.AnalysisStatus.PENDING)
                 .isNew(true)
                 .isSummarized(false)
                 .build();
@@ -119,10 +120,25 @@ public class NewsArticleService {
         article.setRelevanceScore(relevanceScore);
         article.setCategory(category);
         article.setImportance(importance);
+        article.setAnalysisStatus(NewsArticle.AnalysisStatus.COMPLETED);
         article.setIsSummarized(true);
 
         newsArticleRepository.save(article);
         log.info("기사 요약 완료: {} -> {} (점수: {})", article.getTitle(), titleKo, relevanceScore);
+    }
+
+    @Transactional
+    public void updateTitleAndContent(Long id, String title, String content) {
+        newsArticleRepository.findById(id).ifPresent(article -> {
+            if (title != null && !title.isBlank()) {
+                article.setTitle(title);
+            }
+            if (content != null && !content.isBlank()) {
+                article.setContent(content);
+            }
+            newsArticleRepository.save(article);
+            log.debug("기사 제목/본문 업데이트: {} -> {}", id, title);
+        });
     }
 
     @Transactional
@@ -156,6 +172,14 @@ public class NewsArticleService {
     public Page<NewsArticleDto.Response> findByImportance(NewsArticle.ArticleImportance importance, Pageable pageable) {
         return newsArticleRepository.findByImportanceOrderByCrawledAtDesc(importance, pageable)
                 .map(NewsArticleDto.Response::from);
+    }
+
+    @Transactional
+    public void updateAnalysisStatus(Long id, NewsArticle.AnalysisStatus status) {
+        newsArticleRepository.findById(id).ifPresent(article -> {
+            article.setAnalysisStatus(status);
+            newsArticleRepository.save(article);
+        });
     }
 
     @Transactional

@@ -57,13 +57,22 @@ public class SecurityConfig {
                                 "/actuator/**",
                                 "/oauth2/**",
                                 "/login/**",
+                                // SPA 라우트 (프런트엔드 경로)도 인증 없이 통과시켜 index.html 포워딩
+                                "/dashboard/**",
+                                "/articles/**",
+                                "/targets/**",
+                                "/history/**",
+                                "/report/**",
+                                "/favicon.ico",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
                                 "/api/ai-test/**",
                                 "/api/reports/**",
                                 "/api/crawl/**",
                                 "/api/dashboard/**",
-                                "/api/news-articles/**"
+                                "/api/news-articles/**",
+                                // 프런트에서 사용하는 기사 조회 엔드포인트 전체 공개
+                                "/api/articles/**"
                         ).permitAll()
                         // All other API endpoints require authentication
                         .requestMatchers("/api/**").authenticated()

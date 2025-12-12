@@ -25,6 +25,7 @@ public class NewsArticleDto {
         private Double relevanceScore;
         private NewsArticle.ArticleCategory category;
         private NewsArticle.ArticleImportance importance;
+        private NewsArticle.AnalysisStatus analysisStatus;
         private Boolean isNew;
         private Boolean isSummarized;
         private String thumbnailUrl;
@@ -48,6 +49,7 @@ public class NewsArticleDto {
                     .relevanceScore(entity.getRelevanceScore())
                     .category(entity.getCategory())
                     .importance(entity.getImportance())
+                    .analysisStatus(entity.getAnalysisStatus())
                     .isNew(isNewArticle)
                     .isSummarized(entity.getIsSummarized())
                     .thumbnailUrl(entity.getThumbnailUrl())
@@ -75,6 +77,7 @@ public class NewsArticleDto {
         private Double relevanceScore;
         private NewsArticle.ArticleCategory category;
         private NewsArticle.ArticleImportance importance;
+        private NewsArticle.AnalysisStatus analysisStatus;
         private Boolean isNew;
         private Boolean isSummarized;
         private String thumbnailUrl;
@@ -100,6 +103,7 @@ public class NewsArticleDto {
                     .relevanceScore(entity.getRelevanceScore())
                     .category(entity.getCategory())
                     .importance(entity.getImportance())
+                    .analysisStatus(entity.getAnalysisStatus())
                     .isNew(isNewArticle)
                     .isSummarized(entity.getIsSummarized())
                     .thumbnailUrl(entity.getThumbnailUrl())

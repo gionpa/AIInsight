@@ -1,8 +1,8 @@
 package com.aiinsight.service;
 
+import com.aiinsight.domain.article.NewsArticle;
 import com.aiinsight.domain.embedding.ArticleEmbedding;
 import com.aiinsight.domain.embedding.ArticleEmbeddingRepository;
-import com.aiinsight.domain.article.NewsArticle;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,14 +35,22 @@ public class EmbeddingService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
+    @Value("${ai.embedding.provider:local-bge}")
+    private String embeddingProvider; // local-bge | openai
+
+    @Value("${ai.embedding.model:BAAI/bge-m3}")
+    private String embeddingModel;
+
+    @Value("${ai.embedding.endpoint:http://localhost:8081/embeddings}")
+    private String embeddingEndpoint;
+
+    @Value("${ai.embedding.dimension:1024}")
+    private int embeddingDimension;
+
     @Value("${ai.openai.api-key:}")
     private String openAiApiKey;
 
-    @Value("${ai.openai.embedding-model:text-embedding-3-small}")
-    private String embeddingModel;
-
     private static final String OPENAI_EMBEDDING_URL = "https://api.openai.com/v1/embeddings";
-    private static final int EMBEDDING_DIMENSION = 1536;
 
     /**
      * 기사의 임베딩을 생성하고 저장
@@ -64,8 +72,12 @@ public class EmbeddingService {
             String embeddingText = prepareEmbeddingText(article);
             int tokenCount = estimateTokenCount(embeddingText);
 
-            // OpenAI API 호출
-            List<Double> embeddingVector = callOpenAiEmbeddingApi(embeddingText);
+            // 임베딩 생성 (provider에 따라 분기)
+            List<Double> embeddingVector = switch (embeddingProvider.toLowerCase()) {
+                case "openai" -> callOpenAiEmbeddingApi(embeddingText);
+                case "local-bge", "local" -> callLocalEmbeddingApi(embeddingText);
+                default -> throw new IllegalStateException("알 수 없는 임베딩 공급자: " + embeddingProvider);
+            };
 
             // ArticleEmbedding 엔티티 생성
             ArticleEmbedding embedding = ArticleEmbedding.builder()
@@ -189,10 +201,50 @@ public class EmbeddingService {
                 objectMapper.getTypeFactory().constructCollectionType(List.class, Double.class)
         );
 
-        if (embedding.size() != EMBEDDING_DIMENSION) {
+        if (embedding.size() != embeddingDimension) {
             throw new IllegalStateException(
                     String.format("예상하지 못한 임베딩 차원: %d (예상: %d)",
-                    embedding.size(), EMBEDDING_DIMENSION)
+                    embedding.size(), embeddingDimension)
+            );
+        }
+
+        return embedding;
+    }
+
+    /**
+     * 로컬 Hugging Face text-embeddings-inference 서버 호출 (BAAI/bge-m3)
+     */
+    private List<Double> callLocalEmbeddingApi(String text) throws Exception {
+        // HTTP 헤더 설정
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+
+        // 요청 바디 생성 (text-embeddings-inference는 OpenAI 호환 형식을 사용)
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", embeddingModel);
+        requestBody.put("input", text);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                embeddingEndpoint,
+                HttpMethod.POST,
+                entity,
+                String.class
+        );
+
+        JsonNode root = objectMapper.readTree(response.getBody());
+        JsonNode embeddingNode = root.path("data").get(0).path("embedding");
+
+        List<Double> embedding = objectMapper.convertValue(
+                embeddingNode,
+                objectMapper.getTypeFactory().constructCollectionType(List.class, Double.class)
+        );
+
+        if (embedding.size() != embeddingDimension) {
+            throw new IllegalStateException(
+                    String.format("예상하지 못한 임베딩 차원: %d (예상: %d)",
+                            embedding.size(), embeddingDimension)
             );
         }
 
@@ -223,7 +275,7 @@ public class EmbeddingService {
         log.info("임베딩 배치 생성 시작: 최대 {}개", limit);
 
         List<NewsArticle> articlesWithoutEmbedding =
-                embeddingRepository.findArticlesWithoutEmbedding(limit);
+                embeddingRepository.findArticlesWithoutEmbedding(org.springframework.data.domain.PageRequest.of(0, limit));
 
         log.info("임베딩이 없는 기사: {}개", articlesWithoutEmbedding.size());
 

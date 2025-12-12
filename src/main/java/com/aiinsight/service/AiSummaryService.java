@@ -132,6 +132,9 @@ public class AiSummaryService {
             return;
         }
 
+        // 상태: 분석 중
+        newsArticleService.updateAnalysisStatus(article.getId(), NewsArticle.AnalysisStatus.PROCESSING);
+
         if (forceReanalyze) {
             log.info("강제 재분석 모드: 기사 {} 재분석 시작", article.getId());
         }
@@ -153,7 +156,7 @@ public class AiSummaryService {
         if (needMetadataFetch && url != null && !url.isEmpty()) {
             metadata = fetchMetadataFromUrl(url);
             if (metadata[0] != null && !metadata[0].isEmpty()) {
-                // 원본 기사의 title도 업데이트
+                // 원본 기사의 title도 업데이트 (DB 반영)
                 article.setTitle(metadata[0]);
                 title = metadata[0];
                 log.info("URL 메타데이터에서 제목 추출 및 업데이트: {} -> {}", url, title);
@@ -193,6 +196,9 @@ public class AiSummaryService {
             content = content.substring(0, 3000) + "...";
         }
 
+        // 제목/본문 변경 사항 DB 반영
+        newsArticleService.updateTitleAndContent(article.getId(), title, content);
+
         String prompt = String.format(SUMMARY_PROMPT, title != null ? title : "", content);
 
         try {
@@ -208,19 +214,26 @@ public class AiSummaryService {
                 response = callOpenAiApi(prompt);
             }
 
+            boolean parsed = false;
             if (response != null) {
-                parseSummaryResponse(article.getId(), response);
+                parsed = parseSummaryResponse(article.getId(), response);
 
-                // AI 분석 완료 후 임베딩 생성
-                try {
-                    embeddingService.generateAndSaveEmbedding(article);
-                    log.info("임베딩 생성 완료 (기사 ID: {})", article.getId());
-                } catch (Exception embeddingError) {
-                    log.error("임베딩 생성 실패 (기사 ID: {}): {}", article.getId(), embeddingError.getMessage());
+                if (parsed) {
+                    // AI 분석 완료 후 임베딩 생성
+                    try {
+                        embeddingService.generateAndSaveEmbedding(article);
+                        log.info("임베딩 생성 완료 (기사 ID: {})", article.getId());
+                    } catch (Exception embeddingError) {
+                        log.error("임베딩 생성 실패 (기사 ID: {}): {}", article.getId(), embeddingError.getMessage());
+                    }
                 }
             }
+            // 완료/실패 상태
+            newsArticleService.updateAnalysisStatus(article.getId(),
+                    parsed ? NewsArticle.AnalysisStatus.COMPLETED : NewsArticle.AnalysisStatus.FAILED);
         } catch (Exception e) {
             log.error("AI 요약 실패: {} - {}", article.getId(), e.getMessage());
+            newsArticleService.updateAnalysisStatus(article.getId(), NewsArticle.AnalysisStatus.FAILED);
         }
     }
 
@@ -355,13 +368,13 @@ public class AiSummaryService {
         }
     }
 
-    private void parseSummaryResponse(Long articleId, String response) {
+    private boolean parseSummaryResponse(Long articleId, String response) {
         try {
             // JSON 추출 (응답에 다른 텍스트가 포함될 수 있음)
             String jsonStr = extractJson(response);
             if (jsonStr == null) {
                 log.warn("JSON 추출 실패: {}", response);
-                return;
+                return false;
             }
 
             JsonNode json = objectMapper.readTree(jsonStr);
@@ -388,9 +401,10 @@ public class AiSummaryService {
 
             newsArticleService.updateSummary(articleId, titleKo, summary, relevanceScore, category, importance);
             log.info("기사 요약 완료: {} (관련성: {}, 카테고리: {}, 제목: {})", articleId, relevanceScore, category, titleKo);
-
+            return true;
         } catch (Exception e) {
             log.error("요약 응답 파싱 실패: {} - {}", articleId, e.getMessage());
+            return false;
         }
     }
 

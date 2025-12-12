@@ -9,8 +9,8 @@ spring:
     username: aiinsight
     password: aiinsight123
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
+      maximum-pool-size: 15  # Schedulers + API 동시 접근을 고려해 여유롭게 확장
+      minimum-idle: 5
       connection-timeout: 20000
 
   jpa:
@@ -47,6 +47,12 @@ crawler:
 
 # AI summarization settings
 ai:
+  embedding:
+    provider: local-bge
+    model: BAAI/bge-small-en-v1.5
+    endpoint: http://localhost:8081/embeddings
+    dimension: 384
+
   provider: claude-cli
   openai:
     api-key: ${OPENAI_API_KEY:}

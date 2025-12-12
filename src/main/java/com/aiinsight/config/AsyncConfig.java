@@ -21,8 +21,8 @@ public class AsyncConfig {
     @Bean(name = "aiAnalysisExecutor")
     public Executor aiAnalysisExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);      // 기본 스레드 수
-        executor.setMaxPoolSize(5);       // 최대 스레드 수
+        executor.setCorePoolSize(1);      // 기본 스레드 수 (순차 처리)
+        executor.setMaxPoolSize(1);       // 최대 스레드 수 (순차 처리 보장)
         executor.setQueueCapacity(100);   // 대기 큐 크기
         executor.setThreadNamePrefix("ai-analysis-");
 

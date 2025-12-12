@@ -27,22 +27,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String token = resolveToken(request);
+        try {
+            String token = resolveToken(request);
 
-        if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-            String naverId = jwtTokenProvider.getNaverIdFromToken(token);
-            Long userId = jwtTokenProvider.getUserIdFromToken(token);
-            String role = jwtTokenProvider.getRoleFromToken(token);
+            if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
+                String naverId = jwtTokenProvider.getNaverIdFromToken(token);
+                Long userId = jwtTokenProvider.getUserIdFromToken(token);
+                String role = jwtTokenProvider.getRoleFromToken(token);
 
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userId,
-                            naverId,
-                            Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
-                    );
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userId,
+                                naverId,
+                                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                        );
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            log.debug("Set Authentication for user: {}", naverId);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+                log.debug("Set Authentication for user: {}", naverId);
+            }
+        } catch (Exception ex) {
+            // JWT 파싱 오류로 인해 전체 요청이 500으로 떨어지지 않도록 방어
+            log.error("JWT authentication filter error: {}", ex.getMessage(), ex);
         }
 
         filterChain.doFilter(request, response);

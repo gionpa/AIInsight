@@ -22,6 +22,9 @@ spring:
             token-uri: https://nid.naver.com/oauth2.0/token
             user-info-uri: https://openapi.naver.com/v1/nid/me
             user-name-attribute: response
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
 
 # JWT 설정
 jwt:
@@ -42,11 +45,17 @@ crawler:
 
 # AI 요약 설정
 ai:
+  embedding:
+    provider: ${EMBEDDING_PROVIDER:local-bge}  # local-bge | openai
+    model: ${EMBEDDING_MODEL:BAAI/bge-small-en-v1.5}
+    endpoint: ${EMBEDDING_ENDPOINT:http://localhost:8081/embeddings}
+    dimension: ${EMBEDDING_DIMENSION:384}
+
   provider: claude-cli  # claude-cli (headless 모드), claude (API), openai
   openai:
     api-key: ${OPENAI_API_KEY:}
     model: gpt-4o-mini
-    embedding-model: text-embedding-3-small  # 1536 dimensions, $0.02/1M tokens
+    embedding-model: text-embedding-3-small  # OpenAI fallback 시 사용
   claude:
     api-key: ${CLAUDE_API_KEY:}
     model: claude-3-haiku-20240307

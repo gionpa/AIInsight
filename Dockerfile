@@ -46,6 +46,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
     ca-certificates \
+    python3 \
+    python3-pip \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -94,6 +96,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code \
     && claude --version || echo "Claude CLI installed"
 
+# Hugging Face text-embeddings-inference 설치 (CPU)
+RUN pip install --no-cache-dir "text-embeddings-inference[cpu]==1.2.3"
+
 # Claude CLI 설정 디렉토리 및 onboarding 완료 설정
 # CLAUDE_CODE_OAUTH_TOKEN 환경변수와 함께 사용
 RUN mkdir -p /root/.claude && \
@@ -119,10 +124,15 @@ ENV PATH="/usr/local/bin:$PATH"
 
 # 포트 노출
 EXPOSE 8080
+EXPOSE 8081
 
 # 헬스체크
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
-# 실행
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# 실행 스크립트 복사
+COPY start-with-embedding.sh /app/start-with-embedding.sh
+RUN chmod +x /app/start-with-embedding.sh
+
+# 실행: 8081에 임베딩 서버를 백그라운드로 띄운 뒤 Spring Boot 실행
+ENTRYPOINT ["/app/start-with-embedding.sh"]

@@ -45,6 +45,12 @@ public class NewsArticle {
     @Column(columnDefinition = "TEXT")
     private String summary;
 
+    // AI 분석 상태
+    @Enumerated(EnumType.STRING)
+    @Column(name = "analysis_status", length = 20)
+    @Builder.Default
+    private AnalysisStatus analysisStatus = AnalysisStatus.PENDING;
+
     // 원문 작성자
     private String author;
 
@@ -109,5 +115,12 @@ public class NewsArticle {
         HIGH,       // 중요
         MEDIUM,     // 보통
         LOW         // 낮음
+    }
+
+    public enum AnalysisStatus {
+        PENDING,        // 대기
+        PROCESSING,     // 분석 중
+        COMPLETED,      // 완료
+        FAILED          // 실패
     }
 }

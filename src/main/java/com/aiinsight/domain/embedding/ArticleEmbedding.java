@@ -4,6 +4,7 @@ import com.aiinsight.domain.article.NewsArticle;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
@@ -11,7 +12,7 @@ import java.time.LocalDateTime;
 /**
  * 기사 임베딩 벡터 엔티티
  * - pgvector를 사용한 의미 기반 유사도 검색
- * - OpenAI text-embedding-3-small (1536 차원) 사용
+ * - 기본 모델: BAAI/bge-m3 (1024 차원, text-embeddings-inference 호환)
  */
 @Entity
 @Table(name = "article_embedding", indexes = {
@@ -37,16 +38,17 @@ public class ArticleEmbedding {
     private NewsArticle article;
 
     /**
-     * 임베딩 벡터 (1536 차원)
+     * 임베딩 벡터 (기본 1024 차원)
      * - pgvector의 vector 타입 사용
      * - 코사인 유사도 검색 지원
      */
-    @Column(name = "embedding_vector", columnDefinition = "vector(1536)", nullable = false)
+    @Column(name = "embedding_vector", columnDefinition = "vector(384)", nullable = false)
+    @ColumnTransformer(write = "?::vector")
     private String embeddingVector;  // PostgreSQL vector 타입 (문자열로 저장)
 
     /**
      * 임베딩 모델 정보
-     * - 예: "text-embedding-3-small", "text-embedding-ada-002"
+     * - 예: "BAAI/bge-m3", "text-embedding-3-small"
      */
     @Column(name = "model_name", length = 100, nullable = false)
     private String modelName;

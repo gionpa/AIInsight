@@ -46,6 +46,7 @@ export interface NewsArticle {
   relevanceScore?: number;
   category?: ArticleCategory;
   importance?: ArticleImportance;
+  analysisStatus?: AnalysisStatus;
   isNew: boolean;
   isSummarized: boolean;
   thumbnailUrl?: string;
@@ -56,6 +57,8 @@ export interface NewsArticleDetail extends NewsArticle {
   content?: string;
   updatedAt: string;
 }
+
+export type AnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
 export type ArticleCategory =
   | 'LLM'

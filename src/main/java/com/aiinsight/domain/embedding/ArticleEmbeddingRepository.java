@@ -37,13 +37,15 @@ public interface ArticleEmbeddingRepository extends JpaRepository<ArticleEmbeddi
     /**
      * 임베딩이 없는 기사 엔티티 목록 조회 (제한 개수)
      */
-    @Query(value = """
-        SELECT na.* FROM news_article na
-        WHERE na.id NOT IN (SELECT ae.article_id FROM article_embedding ae)
-        ORDER BY na.published_at DESC
-        LIMIT :limit
-        """, nativeQuery = true)
-    List<NewsArticle> findArticlesWithoutEmbedding(@Param("limit") int limit);
+    @Query("""
+        SELECT na FROM NewsArticle na
+        WHERE NOT EXISTS (
+            SELECT 1 FROM ArticleEmbedding ae
+            WHERE ae.article = na
+        )
+        ORDER BY na.publishedAt DESC
+        """)
+    List<NewsArticle> findArticlesWithoutEmbedding(org.springframework.data.domain.Pageable pageable);
 
     /**
      * 특정 기간 내 생성된 임베딩 조회
