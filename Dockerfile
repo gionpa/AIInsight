@@ -96,9 +96,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code \
     && claude --version || echo "Claude CLI installed"
 
-# Hugging Face text-embeddings-inference 설치 (CPU)
+# Python deps for lightweight embedding server (fastembed + FastAPI)
 RUN python3 -m pip install --upgrade pip \
-    && python3 -m pip install --no-cache-dir -i https://pypi.org/simple text-embeddings-inference
+    && python3 -m pip install --no-cache-dir -i https://pypi.org/simple fastapi "uvicorn[standard]" fastembed
 
 # Claude CLI 설정 디렉토리 및 onboarding 완료 설정
 # CLAUDE_CODE_OAUTH_TOKEN 환경변수와 함께 사용
@@ -138,6 +138,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 # 실행 스크립트 복사
 COPY start-with-embedding.sh /app/start-with-embedding.sh
+COPY embedding_server.py /app/embedding_server.py
 RUN chmod +x /app/start-with-embedding.sh
 
 # 실행: 8081에 임베딩 서버를 백그라운드로 띄운 뒤 Spring Boot 실행
