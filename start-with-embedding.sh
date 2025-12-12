@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-set -euo pipefail
+set -eu
 
 EMBED_MODEL="${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}"
 EMBED_ENDPOINT_PORT="${EMBEDDING_PORT:-8081}"
