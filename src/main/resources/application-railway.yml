@@ -2,6 +2,14 @@ spring:
   application:
     name: aiinsight
 
+  # OAuth2 설정 - Railway 환경용 명시적 redirect-uri
+  security:
+    oauth2:
+      client:
+        registration:
+          naver:
+            redirect-uri: https://aiinsight-production.up.railway.app/login/oauth2/code/naver
+
   datasource:
     # Railway pgvector 서비스 연결 (환경변수로 오버라이드)
     url: jdbc:postgresql://${PGVECTOR_HOST:turntable.proxy.rlwy.net}:${PGVECTOR_PORT:45703}/${PGVECTOR_DATABASE:railway}
@@ -111,6 +119,9 @@ logging:
   level:
     root: INFO
     com.aiinsight: INFO
+    com.aiinsight.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    org.springframework.web.client.RestTemplate: DEBUG
     org.hibernate.SQL: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"

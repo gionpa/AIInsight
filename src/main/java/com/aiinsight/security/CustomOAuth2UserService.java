@@ -25,6 +25,11 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         try {
             log.info("OAuth2 loadUser started");
+            log.info("Token URI: {}", userRequest.getClientRegistration().getProviderDetails().getTokenUri());
+            log.info("User Info URI: {}", userRequest.getClientRegistration().getProviderDetails().getUserInfoEndpoint().getUri());
+            log.info("Redirect URI: {}", userRequest.getClientRegistration().getRedirectUri());
+            log.info("Access Token: {}...", userRequest.getAccessToken().getTokenValue().substring(0, Math.min(20, userRequest.getAccessToken().getTokenValue().length())));
+
             OAuth2User oAuth2User = super.loadUser(userRequest);
             log.info("OAuth2User loaded from provider");
 
