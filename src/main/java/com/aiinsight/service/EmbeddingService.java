@@ -222,6 +222,8 @@ public class EmbeddingService {
      * 로컬 Hugging Face text-embeddings-inference 서버 호출 (BAAI/bge-m3)
      */
     private List<Double> callLocalEmbeddingApi(String text) throws Exception {
+        log.info("로컬 임베딩 API 호출 시작 - endpoint: {}, model: {}", embeddingEndpoint, embeddingModel);
+
         // HTTP 헤더 설정
         HttpHeaders headers = new HttpHeaders();
         headers.set("Content-Type", "application/json");
@@ -233,12 +235,14 @@ public class EmbeddingService {
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
+        log.info("임베딩 서버로 요청 전송 중...");
         ResponseEntity<String> response = restTemplate.exchange(
                 embeddingEndpoint,
                 HttpMethod.POST,
                 entity,
                 String.class
         );
+        log.info("임베딩 서버 응답 수신 완료 - status: {}", response.getStatusCode());
 
         JsonNode root = objectMapper.readTree(response.getBody());
         JsonNode embeddingNode = root.path("data").get(0).path("embedding");
