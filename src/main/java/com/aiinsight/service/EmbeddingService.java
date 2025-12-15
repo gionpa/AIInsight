@@ -59,7 +59,8 @@ public class EmbeddingService {
      */
     @Transactional
     public ArticleEmbedding generateAndSaveEmbedding(NewsArticle article) {
-        log.info("임베딩 생성 시작: 기사 ID {}", article.getId());
+        long startTime = System.currentTimeMillis();
+        log.info("임베딩 생성 시작: 기사 ID {}, 제공자: {}", article.getId(), embeddingProvider);
 
         try {
             // 이미 임베딩이 존재하는지 확인
@@ -72,12 +73,14 @@ public class EmbeddingService {
             String embeddingText = prepareEmbeddingText(article);
             int tokenCount = estimateTokenCount(embeddingText);
 
+            long apiStartTime = System.currentTimeMillis();
             // 임베딩 생성 (provider에 따라 분기)
             List<Double> embeddingVector = switch (embeddingProvider.toLowerCase()) {
                 case "openai" -> callOpenAiEmbeddingApi(embeddingText);
                 case "local-bge", "local" -> callLocalEmbeddingApi(embeddingText);
                 default -> throw new IllegalStateException("알 수 없는 임베딩 공급자: " + embeddingProvider);
             };
+            long apiDuration = System.currentTimeMillis() - apiStartTime;
 
             // ArticleEmbedding 엔티티 생성
             ArticleEmbedding embedding = ArticleEmbedding.builder()
@@ -91,12 +94,16 @@ public class EmbeddingService {
 
             // 저장
             ArticleEmbedding saved = embeddingRepository.save(embedding);
-            log.info("임베딩 저장 완료: 기사 ID {}, 토큰 수 {}", article.getId(), tokenCount);
+
+            long totalDuration = System.currentTimeMillis() - startTime;
+            log.info("임베딩 저장 완료: 기사 ID {}, 토큰 수 {}, API 호출 {}ms, 전체 {}ms, 차원: {}",
+                    article.getId(), tokenCount, apiDuration, totalDuration, embeddingVector.size());
 
             return saved;
 
         } catch (Exception e) {
-            log.error("임베딩 생성 실패: 기사 ID {}, 오류: {}", article.getId(), e.getMessage(), e);
+            long totalDuration = System.currentTimeMillis() - startTime;
+            log.error("임베딩 생성 실패: 기사 ID {}, 소요시간 {}ms, 오류: {}", article.getId(), totalDuration, e.getMessage(), e);
             return null;
         }
     }
@@ -272,6 +279,7 @@ public class EmbeddingService {
      */
     @Transactional
     public int generateEmbeddingsForArticlesWithoutEmbedding(int limit) {
+        long batchStartTime = System.currentTimeMillis();
         log.info("임베딩 배치 생성 시작: 최대 {}개", limit);
 
         List<NewsArticle> articlesWithoutEmbedding =
@@ -280,22 +288,33 @@ public class EmbeddingService {
         log.info("임베딩이 없는 기사: {}개", articlesWithoutEmbedding.size());
 
         int successCount = 0;
+        int failCount = 0;
+        long totalApiTime = 0;
+
         for (NewsArticle article : articlesWithoutEmbedding) {
             try {
                 ArticleEmbedding embedding = generateAndSaveEmbedding(article);
                 if (embedding != null) {
                     successCount++;
+                } else {
+                    failCount++;
                 }
 
                 // API Rate Limit 방지를 위한 짧은 대기 (100ms)
                 Thread.sleep(100);
 
             } catch (Exception e) {
+                failCount++;
                 log.error("배치 임베딩 생성 실패: 기사 ID {}", article.getId(), e);
             }
         }
 
-        log.info("임베딩 배치 생성 완료: {}/{} 성공", successCount, articlesWithoutEmbedding.size());
+        long batchDuration = System.currentTimeMillis() - batchStartTime;
+        double avgTimePerArticle = articlesWithoutEmbedding.isEmpty() ? 0 : (double) batchDuration / articlesWithoutEmbedding.size();
+
+        log.info("임베딩 배치 생성 완료: 성공 {}/{}, 실패 {}, 전체 소요시간 {}ms, 평균 {:.0f}ms/기사",
+                successCount, articlesWithoutEmbedding.size(), failCount, batchDuration, avgTimePerArticle);
+
         return successCount;
     }
 
