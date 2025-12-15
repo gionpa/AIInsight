@@ -390,8 +390,9 @@ public class EmbeddingService {
         return results.stream()
                 .map(row -> {
                     Map<String, Object> map = new HashMap<>();
-                    map.put("articleId", ((ArticleEmbedding) row[0]).getArticle().getId());
-                    map.put("similarity", row[1]);
+                    // row[0]은 article_id (Long), row[1]은 similarity (Double)
+                    map.put("articleId", ((Number) row[0]).longValue());
+                    map.put("similarity", ((Number) row[1]).doubleValue());
                     return map;
                 })
                 .toList();

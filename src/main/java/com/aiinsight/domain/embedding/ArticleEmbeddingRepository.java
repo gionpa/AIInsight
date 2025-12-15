@@ -71,9 +71,10 @@ public interface ArticleEmbeddingRepository extends JpaRepository<ArticleEmbeddi
      * 코사인 유사도 기반 유사 기사 검색
      * - pgvector의 <=> 연산자 사용 (코사인 거리)
      * - 거리가 가까울수록 유사함
+     * - article_id와 similarity만 반환
      */
     @Query(value = """
-        SELECT ae.*, 1 - (ae.embedding_vector <=> CAST(:queryVector AS vector)) AS similarity
+        SELECT ae.article_id, 1 - (ae.embedding_vector <=> CAST(:queryVector AS vector)) AS similarity
         FROM article_embedding ae
         WHERE ae.article_id != :excludeArticleId
         ORDER BY ae.embedding_vector <=> CAST(:queryVector AS vector)
