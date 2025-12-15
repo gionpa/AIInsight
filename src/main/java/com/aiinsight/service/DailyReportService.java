@@ -47,10 +47,11 @@ public class DailyReportService {
     private final ObjectMapper objectMapper;
 
     /**
-     * RAG 기반 고도화된 일일 리포트 생성
-     * - 최근 7일간의 HIGH 중요도 기사 분석
+     * RAG 기반 고도화된 월간 리포트 생성
+     * - 최근 30일간의 HIGH 중요도 기사 분석
      * - 임베딩 기반 계층적 클러스터링
      * - Claude AI를 활용한 심층 분석 및 요약
+     * - 시계열 트렌드 분석 및 주간 변화 추이
      *
      * @param targetDate 리포트 대상 날짜
      * @return 생성된 DailyReport
@@ -58,7 +59,7 @@ public class DailyReportService {
     @Transactional
     public DailyReport generateDailyReport(LocalDate targetDate) {
         long startTime = System.currentTimeMillis();
-        log.info("=== RAG 기반 일일 리포트 생성 시작: {} ===", targetDate);
+        log.info("=== RAG 기반 월간 리포트 생성 시작: {} ===", targetDate);
 
         try {
             // 1. 기존 리포트 삭제 (재생성 허용)
@@ -67,9 +68,9 @@ public class DailyReportService {
                 reportRepository.delete(existing);
             });
 
-            // 2. 최근 7일간의 HIGH 중요도 기사 조회 (임베딩 필수)
+            // 2. 최근 30일간의 HIGH 중요도 기사 조회 (임베딩 필수)
             LocalDateTime endOfDay = targetDate.plusDays(1).atStartOfDay();
-            LocalDateTime startOfPeriod = targetDate.minusDays(6).atStartOfDay(); // 7일 전부터
+            LocalDateTime startOfPeriod = targetDate.minusDays(29).atStartOfDay(); // 30일 전부터
 
             List<NewsArticle> highImportanceArticles = articleRepository.findByImportanceAndCrawledAtBetween(
                     NewsArticle.ArticleImportance.HIGH,
@@ -77,7 +78,7 @@ public class DailyReportService {
                     endOfDay
             );
 
-            log.info("최근 7일간 HIGH 중요도 기사 수: {}", highImportanceArticles.size());
+            log.info("최근 30일간 HIGH 중요도 기사 수: {}", highImportanceArticles.size());
 
             // 3. 임베딩이 있는 기사만 필터링
             List<NewsArticle> articlesWithEmbedding = highImportanceArticles.stream()
@@ -301,7 +302,7 @@ public class DailyReportService {
     }
 
     /**
-     * 트렌드 분석 (7일 전 vs 최근)
+     * 트렌드 분석 (30일 전 vs 최근 30일)
      * - 신규 등장 토픽
      * - 증가 중인 토픽
      * - 감소 중인 토픽
@@ -309,19 +310,19 @@ public class DailyReportService {
     private TrendAnalysis analyzeTrends(LocalDate targetDate, List<NewsArticle> recentArticles) {
         TrendAnalysis analysis = new TrendAnalysis();
 
-        // 7일 이전 기사 조회 (비교 기준)
-        LocalDateTime sevenDaysAgo = targetDate.minusDays(7).atStartOfDay();
-        LocalDateTime fourteenDaysAgo = targetDate.minusDays(14).atStartOfDay();
+        // 30일 이전 기사 조회 (비교 기준: 30-60일 전)
+        LocalDateTime thirtyDaysAgo = targetDate.minusDays(30).atStartOfDay();
+        LocalDateTime sixtyDaysAgo = targetDate.minusDays(60).atStartOfDay();
 
         List<NewsArticle> oldArticles = articleRepository.findByImportanceAndCrawledAtBetween(
                 NewsArticle.ArticleImportance.HIGH,
-                fourteenDaysAgo,
-                sevenDaysAgo
+                sixtyDaysAgo,
+                thirtyDaysAgo
         ).stream()
                 .filter(article -> embeddingRepository.existsByArticle(article))
                 .collect(Collectors.toList());
 
-        log.info("트렌드 분석: 최근 {}개, 과거(7-14일전) {}개",
+        log.info("트렌드 분석: 최근 30일 {}개, 과거(30-60일전) {}개",
                 recentArticles.size(), oldArticles.size());
 
         // 카테고리별 기사 수 비교
@@ -396,42 +397,54 @@ public class DailyReportService {
                     .collect(Collectors.toList());
 
             String prompt = String.format("""
-                    당신은 AI 업계 전문 애널리스트입니다. 최근 7일간의 주요 AI 뉴스를 분석하여 경영진용 Executive Summary를 작성해주세요.
+                    당신은 AI 업계 전문 애널리스트입니다. 최근 30일간의 주요 AI 뉴스를 분석하여 경영진용 월간 리포트를 작성해주세요.
 
-                    **분석 기간**: %s 기준 최근 7일
+                    **분석 기간**: %s 기준 최근 30일
                     **분석 대상**: 중요도 HIGH 기사 %d개
                     **식별된 주요 토픽**: %d개
 
-                    **트렌드 분석**:
+                    **월간 트렌드 분석** (지난달 대비):
                     - 신규 등장 분야: %s
-                    - 급성장 분야: %s
-                    - 감소 분야: %s
+                    - 급성장 분야 (50%%↑): %s
+                    - 감소 분야 (30%%↓): %s
 
-                    **주요 토픽별 대표 기사**:
+                    **주요 토픽별 대표 기사** (Top 5):
                     %s
 
-                    다음 형식으로 **A4 절반 분량(약 1000자)**의 Executive Summary를 한국어로 작성해주세요:
+                    다음 형식으로 **A4 한 페이지 분량(약 1500-2000자)**의 월간 리포트를 한국어로 작성해주세요:
 
-                    ## 핵심 요약 (2-3문장)
-                    이번 주 AI 업계의 가장 중요한 변화와 핵심 메시지를 간결하게 요약
+                    ## 1. Executive Summary (핵심 요약)
+                    이번 달 AI 업계의 가장 중요한 변화와 핵심 메시지를 3-4문장으로 요약
 
-                    ## 주요 동향
-                    1. [토픽명]: 핵심 내용과 시사점 (2-3문장)
-                    2. [토픽명]: 핵심 내용과 시사점 (2-3문장)
-                    3. [토픽명]: 핵심 내용과 시사점 (2-3문장)
+                    ## 2. 주요 토픽 심층 분석
+                    ### 토픽 1: [토픽명] (기사 X건)
+                    - 핵심 내용: 무엇이 일어났는가? (2-3문장)
+                    - 주요 이슈: 구체적인 사례와 수치
+                    - 시사점: 업계에 미칠 영향과 의미
 
-                    ## 트렌드 인사이트
-                    - 신규/급성장 분야에 대한 분석과 전망
-                    - 업계 전반에 미칠 영향 평가
+                    ### 토픽 2: [토픽명] (기사 X건)
+                    - 핵심 내용
+                    - 주요 이슈
+                    - 시사점
 
-                    ## 향후 전망
-                    단기적(1-2주) 전망과 주목해야 할 포인트
+                    ### 토픽 3-5: [간략한 요약]
 
-                    주의사항:
-                    - 구체적인 사실과 숫자 기반으로 작성
-                    - 마케팅성 과장 표현 지양
-                    - 실무자가 실행 가능한 인사이트 제공
-                    - 한국어로 작성
+                    ## 3. 월간 트렌드 인사이트
+                    - **신규 등장**: 새롭게 주목받는 기술/서비스와 그 배경
+                    - **급성장**: 빠르게 성장하는 분야와 성장 요인
+                    - **주목할 변화**: 업계 판도에 영향을 줄 중요한 움직임
+
+                    ## 4. 향후 전망 및 Action Items
+                    - 단기 전망 (1개월): 예상되는 주요 이벤트와 변화
+                    - 중기 전망 (3개월): 지속적으로 모니터링해야 할 트렌드
+                    - Action Items: 실무자가 취해야 할 구체적인 액션 (2-3개)
+
+                    작성 가이드라인:
+                    - 구체적인 사실, 숫자, 인용을 활용하여 객관성 확보
+                    - 마케팅성 과장 표현 지양, 분석적 관점 유지
+                    - "~것으로 보인다" 대신 "~한다"로 단정적 서술
+                    - 실무자가 바로 활용 가능한 actionable insight 제공
+                    - 한국어로 작성, 전문 용어는 영문 병기
                     """,
                     targetDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일")),
                     articles.size(),
@@ -498,19 +511,69 @@ public class DailyReportService {
 
     /**
      * Fallback Executive Summary (AI 실패 시)
+     * - Railway 프로덕션 환경에서 사용됨
      */
     private String generateFallbackExecutiveSummary(List<NewsArticle> articles, List<TopicCluster> clusters) {
         StringBuilder summary = new StringBuilder();
-        summary.append(String.format("## 주간 AI 뉴스 요약\n\n"));
-        summary.append(String.format("최근 7일간 총 %d개의 주요 AI 뉴스가 수집되었으며, %d개의 토픽으로 분류되었습니다.\n\n",
-                articles.size(), clusters.size()));
 
-        summary.append("## 주요 토픽\n\n");
+        // 1. 핵심 요약
+        summary.append("## 1. Executive Summary\n\n");
+        summary.append(String.format("최근 30일간 중요도 HIGH로 분류된 %d개의 AI 뉴스를 분석한 결과, ", articles.size()));
+        summary.append(String.format("%d개의 주요 토픽이 식별되었습니다. ", clusters.size()));
+
+        // 카테고리 분포 분석
+        Map<String, Integer> categoryDist = articles.stream()
+                .filter(a -> a.getCategory() != null)
+                .collect(Collectors.groupingBy(
+                        a -> a.getCategory().name(),
+                        Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                ));
+
+        if (!categoryDist.isEmpty()) {
+            String topCategory = categoryDist.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElse("기타");
+            summary.append(String.format("%s 분야가 가장 활발한 움직임을 보였습니다.\n\n", topCategory));
+        }
+
+        // 2. 주요 토픽 심층 분석
+        summary.append("## 2. 주요 토픽 심층 분석\n\n");
         for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
             TopicCluster cluster = clusters.get(i);
-            summary.append(String.format("%d. **%s** (%d건)\n",
+            summary.append(String.format("### 토픽 %d: %s (기사 %d건)\n",
                     i + 1, cluster.getTopicName(), cluster.getArticles().size()));
+
+            // 대표 기사 제목
+            List<String> titles = cluster.getArticles().stream()
+                    .limit(3)
+                    .map(article -> article.getTitleKo() != null ? article.getTitleKo() : article.getTitle())
+                    .collect(Collectors.toList());
+
+            if (!titles.isEmpty()) {
+                summary.append("**주요 기사:**\n");
+                titles.forEach(title -> summary.append(String.format("- %s\n",
+                        title.length() > 60 ? title.substring(0, 60) + "..." : title)));
+            }
+            summary.append("\n");
         }
+
+        // 3. 카테고리별 분포
+        summary.append("## 3. 카테고리별 분포\n\n");
+        categoryDist.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(5)
+                .forEach(entry -> summary.append(String.format("- %s: %d건 (%.1f%%)\n",
+                        entry.getKey(),
+                        entry.getValue(),
+                        (entry.getValue() * 100.0) / articles.size())));
+
+        summary.append("\n");
+
+        // 4. 향후 전망
+        summary.append("## 4. 향후 전망\n\n");
+        summary.append("- **단기 전망**: 현재 확인된 주요 토픽들의 지속적인 발전이 예상됩니다.\n");
+        summary.append("- **Action Items**: 주요 토픽별 상세 분석을 통해 비즈니스 영향도를 평가하시기 바랍니다.\n");
 
         return summary.toString();
     }
