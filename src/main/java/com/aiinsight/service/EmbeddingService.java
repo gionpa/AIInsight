@@ -323,6 +323,57 @@ public class EmbeddingService {
     }
 
     /**
+     * 중요도 HIGH이면서 임베딩이 없는 기사들에 대해 배치로 임베딩 생성
+     * @param limit 한 번에 처리할 최대 기사 수
+     * @return 생성된 임베딩 수
+     */
+    @Transactional
+    public int generateEmbeddingsForHighImportanceArticles(int limit) {
+        long batchStartTime = System.currentTimeMillis();
+        log.info("중요도 HIGH 기사 임베딩 배치 생성 시작: 최대 {}개", limit);
+
+        List<NewsArticle> articlesWithoutEmbedding =
+                embeddingRepository.findArticlesWithoutEmbedding(org.springframework.data.domain.PageRequest.of(0, limit));
+
+        // 중요도 HIGH 기사만 필터링
+        List<NewsArticle> highImportanceArticles = articlesWithoutEmbedding.stream()
+                .filter(article -> article.getImportance() == NewsArticle.ArticleImportance.HIGH)
+                .toList();
+
+        log.info("중요도 HIGH이면서 임베딩이 없는 기사: {}개 (전체 임베딩 없는 기사: {}개)",
+                highImportanceArticles.size(), articlesWithoutEmbedding.size());
+
+        int successCount = 0;
+        int failCount = 0;
+
+        for (NewsArticle article : highImportanceArticles) {
+            try {
+                ArticleEmbedding embedding = generateAndSaveEmbedding(article);
+                if (embedding != null) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+
+                // API Rate Limit 방지를 위한 짧은 대기 (100ms)
+                Thread.sleep(100);
+
+            } catch (Exception e) {
+                failCount++;
+                log.error("배치 임베딩 생성 실패: 기사 ID {}", article.getId(), e);
+            }
+        }
+
+        long batchDuration = System.currentTimeMillis() - batchStartTime;
+        double avgTimePerArticle = highImportanceArticles.isEmpty() ? 0 : (double) batchDuration / highImportanceArticles.size();
+
+        log.info("중요도 HIGH 기사 임베딩 배치 생성 완료: 성공 {}/{}, 실패 {}, 전체 소요시간 {}ms, 평균 {:.0f}ms/기사",
+                successCount, highImportanceArticles.size(), failCount, batchDuration, avgTimePerArticle);
+
+        return successCount;
+    }
+
+    /**
      * 특정 기사와 유사한 기사 찾기 (코사인 유사도 기반)
      * @param articleId 기준 기사 ID
      * @param limit 반환할 최대 개수

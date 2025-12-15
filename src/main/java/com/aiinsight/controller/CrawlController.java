@@ -46,6 +46,14 @@ public class CrawlController {
         return ResponseEntity.ok(new EmbeddingGenerationResponse(generated, limit));
     }
 
+    @PostMapping("/generate-embeddings-high")
+    @Operation(summary = "중요도 HIGH 기사 임베딩 생성", description = "중요도가 HIGH이면서 임베딩이 없는 기사에 대해 임베딩을 생성합니다")
+    public ResponseEntity<EmbeddingGenerationResponse> generateHighImportanceEmbeddings(
+            @RequestParam(defaultValue = "100") int limit) {
+        int generated = embeddingService.generateEmbeddingsForHighImportanceArticles(limit);
+        return ResponseEntity.ok(new EmbeddingGenerationResponse(generated, limit));
+    }
+
     public record CrawlResultResponse(
             boolean success,
             int articlesFound,

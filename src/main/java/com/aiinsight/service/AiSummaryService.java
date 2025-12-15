@@ -105,14 +105,6 @@ public class AiSummaryService {
 
                 long duration = System.currentTimeMillis() - startTime;
                 log.info("AI 분석 완료 (기사 ID: {}, 소요시간: {}ms)", articleId, duration);
-
-                // AI 분석 완료 후 임베딩 생성
-                try {
-                    embeddingService.generateAndSaveEmbedding(article);
-                    log.info("임베딩 생성 완료 (기사 ID: {})", articleId);
-                } catch (Exception embeddingError) {
-                    log.error("임베딩 생성 실패 (기사 ID: {}): {}", articleId, embeddingError.getMessage());
-                }
             }
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
@@ -219,12 +211,18 @@ public class AiSummaryService {
                 parsed = parseSummaryResponse(article.getId(), response);
 
                 if (parsed) {
-                    // AI 분석 완료 후 임베딩 생성
-                    try {
-                        embeddingService.generateAndSaveEmbedding(article);
-                        log.info("임베딩 생성 완료 (기사 ID: {})", article.getId());
-                    } catch (Exception embeddingError) {
-                        log.error("임베딩 생성 실패 (기사 ID: {}): {}", article.getId(), embeddingError.getMessage());
+                    // 중요도 HIGH 기사에 대해서만 임베딩 생성
+                    NewsArticle updatedArticle = newsArticleService.findEntityById(article.getId());
+                    if (updatedArticle != null && updatedArticle.getImportance() == NewsArticle.ArticleImportance.HIGH) {
+                        try {
+                            embeddingService.generateAndSaveEmbedding(updatedArticle);
+                            log.info("중요도 HIGH 기사 임베딩 생성 완료 (기사 ID: {})", article.getId());
+                        } catch (Exception embeddingError) {
+                            log.error("임베딩 생성 실패 (기사 ID: {}): {}", article.getId(), embeddingError.getMessage());
+                        }
+                    } else {
+                        log.debug("중요도 HIGH가 아닌 기사는 임베딩 생성 건너뜀 (기사 ID: {}, 중요도: {})",
+                                article.getId(), updatedArticle != null ? updatedArticle.getImportance() : "UNKNOWN");
                     }
                 }
             }
