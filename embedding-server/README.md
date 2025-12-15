@@ -2,6 +2,14 @@
 
 Railway에 BAAI/bge-small-en-v1.5 임베딩 서버를 배포하는 방법입니다.
 
+## 구현 방식
+
+**Python FastAPI + sentence-transformers** 기반 경량 서버:
+- CPU 전용 (Railway 환경 최적화)
+- OpenAI API 호환 형식 지원
+- 메모리 효율적 (약 500MB-1GB)
+- 빠른 시작 시간 (약 30-60초)
+
 ## 1. Railway 프로젝트에 새 서비스 추가
 
 ### Railway Dashboard에서:
@@ -44,11 +52,12 @@ git push -u origin main
 Railway embedding-server 서비스에서:
 
 ```bash
-MODEL_ID=BAAI/bge-small-en-v1.5
+MODEL_NAME=BAAI/bge-small-en-v1.5
 PORT=8081
-MAX_CONCURRENT_REQUESTS=128
-MAX_BATCH_TOKENS=16384
+MAX_LENGTH=512
 ```
+
+**참고**: Python FastAPI 버전을 사용하므로 환경 변수명이 변경되었습니다.
 
 ## 4. 메인 애플리케이션 환경 변수 설정
 
