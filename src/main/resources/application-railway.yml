@@ -72,13 +72,13 @@ crawler:
   delay-between-requests: 2000
 
 # AI 요약 설정
-# Railway 환경에서도 Claude CLI 사용 (로컬과 동일)
+# Railway 환경에서 BGE 임베딩 서버 사용
 ai:
   embedding:
-    provider: local-bge
-    model: BAAI/bge-small-en-v1.5
+    provider: ${EMBEDDING_PROVIDER:local-bge}
+    model: ${EMBEDDING_MODEL:BAAI/bge-small-en-v1.5}
     endpoint: ${EMBEDDING_ENDPOINT:http://localhost:8081/embeddings}
-    dimension: 384
+    dimension: ${EMBEDDING_DIMENSION:384}
 
   provider: ${AI_PROVIDER:claude-cli}
   openai:

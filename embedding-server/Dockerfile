@@ -1,0 +1,16 @@
+# Railway용 BGE 임베딩 서버
+# Hugging Face text-embeddings-inference 사용
+
+FROM ghcr.io/huggingface/text-embeddings-inference:86-0.4.0
+
+# 환경 변수 설정
+ENV MODEL_ID=BAAI/bge-small-en-v1.5
+ENV PORT=8081
+ENV MAX_CONCURRENT_REQUESTS=128
+ENV MAX_BATCH_TOKENS=16384
+
+# 포트 노출
+EXPOSE 8081
+
+# 서버 시작
+CMD ["--model-id", "${MODEL_ID}", "--port", "${PORT}", "--max-concurrent-requests", "${MAX_CONCURRENT_REQUESTS}", "--max-batch-tokens", "${MAX_BATCH_TOKENS}"]
