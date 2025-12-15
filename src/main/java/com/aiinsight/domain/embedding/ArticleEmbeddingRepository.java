@@ -48,6 +48,21 @@ public interface ArticleEmbeddingRepository extends JpaRepository<ArticleEmbeddi
     List<NewsArticle> findArticlesWithoutEmbedding(org.springframework.data.domain.Pageable pageable);
 
     /**
+     * 중요도 HIGH이면서 임베딩이 없는 기사 엔티티 목록 조회 (제한 개수)
+     * 중요도 우선 순위로 정렬: HIGH > MEDIUM > LOW
+     */
+    @Query("""
+        SELECT na FROM NewsArticle na
+        WHERE na.importance = 'HIGH'
+          AND NOT EXISTS (
+            SELECT 1 FROM ArticleEmbedding ae
+            WHERE ae.article = na
+        )
+        ORDER BY na.publishedAt DESC
+        """)
+    List<NewsArticle> findHighImportanceArticlesWithoutEmbedding(org.springframework.data.domain.Pageable pageable);
+
+    /**
      * 특정 기간 내 생성된 임베딩 조회
      */
     List<ArticleEmbedding> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);

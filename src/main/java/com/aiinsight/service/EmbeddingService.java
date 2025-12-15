@@ -332,16 +332,13 @@ public class EmbeddingService {
         long batchStartTime = System.currentTimeMillis();
         log.info("중요도 HIGH 기사 임베딩 배치 생성 시작: 최대 {}개", limit);
 
-        List<NewsArticle> articlesWithoutEmbedding =
-                embeddingRepository.findArticlesWithoutEmbedding(org.springframework.data.domain.PageRequest.of(0, limit));
+        // 중요도 HIGH이면서 임베딩이 없는 기사 조회
+        List<NewsArticle> highImportanceArticles =
+                embeddingRepository.findHighImportanceArticlesWithoutEmbedding(
+                        org.springframework.data.domain.PageRequest.of(0, limit));
 
-        // 중요도 HIGH 기사만 필터링
-        List<NewsArticle> highImportanceArticles = articlesWithoutEmbedding.stream()
-                .filter(article -> article.getImportance() == NewsArticle.ArticleImportance.HIGH)
-                .toList();
-
-        log.info("중요도 HIGH이면서 임베딩이 없는 기사: {}개 (전체 임베딩 없는 기사: {}개)",
-                highImportanceArticles.size(), articlesWithoutEmbedding.size());
+        log.info("중요도 HIGH이면서 임베딩이 없는 기사: {}개",
+                highImportanceArticles.size());
 
         int successCount = 0;
         int failCount = 0;
