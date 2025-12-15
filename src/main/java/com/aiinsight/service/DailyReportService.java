@@ -1,5 +1,6 @@
 package com.aiinsight.service;
 
+import com.aiinsight.config.AiConfig;
 import com.aiinsight.domain.article.NewsArticle;
 import com.aiinsight.domain.article.NewsArticleRepository;
 import com.aiinsight.domain.embedding.ArticleEmbedding;
@@ -13,15 +14,25 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * 일일 리포트 생성 서비스
- * - 임베딩 기반 토픽 클러스터링
- * - Executive Summary 생성 (Claude CLI)
+ * 임베딩 RAG 기반 일일 리포트 생성 서비스
+ * - 계층적 클러스터링을 통한 토픽 분석
+ * - Claude AI를 활용한 Executive Summary 생성
+ * - 최근 7일간 데이터를 활용한 트렌드 분석
+ * - A4 한 페이지 분량의 고품질 리포트
  */
 @Service
 @RequiredArgsConstructor
@@ -32,146 +43,200 @@ public class DailyReportService {
     private final NewsArticleRepository articleRepository;
     private final ArticleEmbeddingRepository embeddingRepository;
     private final EmbeddingService embeddingService;
+    private final AiConfig aiConfig;
     private final ObjectMapper objectMapper;
 
     /**
-     * 특정 날짜의 일일 리포트 생성
+     * RAG 기반 고도화된 일일 리포트 생성
+     * - 최근 7일간의 HIGH 중요도 기사 분석
+     * - 임베딩 기반 계층적 클러스터링
+     * - Claude AI를 활용한 심층 분석 및 요약
+     *
      * @param targetDate 리포트 대상 날짜
      * @return 생성된 DailyReport
      */
     @Transactional
     public DailyReport generateDailyReport(LocalDate targetDate) {
-        log.info("일일 리포트 생성 시작: {}", targetDate);
+        long startTime = System.currentTimeMillis();
+        log.info("=== RAG 기반 일일 리포트 생성 시작: {} ===", targetDate);
 
-        // 1. 이미 생성된 리포트가 있으면 삭제 (재생성 허용)
-        Optional<DailyReport> existingReport = reportRepository.findByReportDate(targetDate);
-        if (existingReport.isPresent()) {
-            log.info("기존 리포트 삭제 후 재생성: {}", targetDate);
-            reportRepository.delete(existingReport.get());
+        try {
+            // 1. 기존 리포트 삭제 (재생성 허용)
+            reportRepository.findByReportDate(targetDate).ifPresent(existing -> {
+                log.info("기존 리포트 삭제 후 재생성: {}", targetDate);
+                reportRepository.delete(existing);
+            });
+
+            // 2. 최근 7일간의 HIGH 중요도 기사 조회 (임베딩 필수)
+            LocalDateTime endOfDay = targetDate.plusDays(1).atStartOfDay();
+            LocalDateTime startOfPeriod = targetDate.minusDays(6).atStartOfDay(); // 7일 전부터
+
+            List<NewsArticle> highImportanceArticles = articleRepository.findByImportanceAndCrawledAtBetween(
+                    NewsArticle.ArticleImportance.HIGH,
+                    startOfPeriod,
+                    endOfDay
+            );
+
+            log.info("최근 7일간 HIGH 중요도 기사 수: {}", highImportanceArticles.size());
+
+            // 3. 임베딩이 있는 기사만 필터링
+            List<NewsArticle> articlesWithEmbedding = highImportanceArticles.stream()
+                    .filter(article -> embeddingRepository.existsByArticle(article))
+                    .collect(Collectors.toList());
+
+            log.info("임베딩이 있는 HIGH 기사 수: {}", articlesWithEmbedding.size());
+
+            if (articlesWithEmbedding.size() < 3) {
+                log.warn("리포트 생성에 충분한 기사가 없음: {} (최소 3개 필요)", articlesWithEmbedding.size());
+                return createErrorReport(targetDate, "충분한 데이터 없음 (임베딩 있는 기사 < 3개)");
+            }
+
+            // 4. 계층적 클러스터링 수행 (유사도 0.65 기준)
+            List<TopicCluster> topicClusters = performHierarchicalClustering(articlesWithEmbedding, 0.65);
+            log.info("계층적 클러스터링 결과: {}개 토픽", topicClusters.size());
+
+            // 5. 각 클러스터에 대해 의미있는 토픽명 생성
+            for (TopicCluster cluster : topicClusters) {
+                cluster.setTopicName(extractSemanticTopicName(cluster.getArticles()));
+            }
+
+            // 6. 트렌드 분석 (7일 전 vs 오늘)
+            TrendAnalysis trendAnalysis = analyzeTrends(targetDate, articlesWithEmbedding);
+            log.info("트렌드 분석 완료: 신규 {}개, 증가 {}개, 감소 {}개",
+                    trendAnalysis.emergingTopics.size(),
+                    trendAnalysis.hotTopics.size(),
+                    trendAnalysis.decliningTopics.size());
+
+            // 7. Claude AI를 활용한 Executive Summary 생성
+            String executiveSummary = generateAIExecutiveSummary(
+                    targetDate,
+                    articlesWithEmbedding,
+                    topicClusters,
+                    trendAnalysis
+            );
+
+            // 8. 카테고리 분포 계산
+            String categoryDistribution = calculateCategoryDistribution(articlesWithEmbedding);
+
+            // 9. 토픽별 AI 요약 생성
+            String topicSummaries = generateAITopicSummaries(topicClusters);
+
+            // 10. 키 트렌드 추출 (TF-IDF 기반)
+            String keyTrends = extractTFIDFKeyTrends(articlesWithEmbedding);
+
+            // 11. 품질 점수 계산
+            double qualityScore = calculateReportQualityScore(articlesWithEmbedding, topicClusters);
+
+            // 12. DailyReport 엔티티 생성 및 저장
+            long duration = System.currentTimeMillis() - startTime;
+            DailyReport report = DailyReport.builder()
+                    .reportDate(targetDate)
+                    .executiveSummary(executiveSummary)
+                    .keyTrends(keyTrends)
+                    .topicSummaries(topicSummaries)
+                    .topicClusters(serializeTopicClusters(topicClusters))
+                    .categoryDistribution(categoryDistribution)
+                    .totalArticles(articlesWithEmbedding.size())
+                    .highImportanceArticles(articlesWithEmbedding.size())
+                    .avgRelevanceScore(calculateAvgRelevanceScore(articlesWithEmbedding))
+                    .qualityScore(qualityScore)
+                    .generationModel("claude-cli + bge-m3")
+                    .generationDurationMs(duration)
+                    .status(DailyReport.ReportStatus.COMPLETED)
+                    .build();
+
+            report.setArticles(articlesWithEmbedding);
+
+            DailyReport savedReport = reportRepository.save(report);
+            log.info("=== RAG 기반 리포트 생성 완료: {} (ID: {}, 소요시간: {}ms) ===",
+                    targetDate, savedReport.getId(), duration);
+
+            return savedReport;
+
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("리포트 생성 실패: {} (소요시간: {}ms)", targetDate, duration, e);
+            return createErrorReport(targetDate, "생성 중 오류 발생: " + e.getMessage());
         }
-
-        // 2. 최근 3일간의 HIGH 중요도 기사 조회 (crawledAt 기준)
-        LocalDateTime endOfDay = targetDate.plusDays(1).atStartOfDay();
-        LocalDateTime startOfPeriod = targetDate.minusDays(2).atStartOfDay(); // 3일 전부터
-
-        // crawledAt 기준으로 조회 (publishedAt은 null이거나 과거일 수 있음)
-        List<NewsArticle> highImportanceArticles = articleRepository.findByImportanceAndCrawledAtBetween(
-                NewsArticle.ArticleImportance.HIGH,
-                startOfPeriod,
-                endOfDay
-        );
-
-        log.info("HIGH 중요도 기사 수 (최근 3일, crawledAt 기준): {}", highImportanceArticles.size());
-
-        if (highImportanceArticles.isEmpty()) {
-            log.warn("HIGH 중요도 기사가 없어 리포트 생성 불가: {}", targetDate);
-            return null;
-        }
-
-        // 3. 임베딩이 있는 기사만 필터링 (없으면 자동 생성 시도)
-        List<NewsArticle> articlesWithEmbedding = highImportanceArticles.stream()
-                .filter(article -> {
-                    // 임베딩이 있는지 확인
-                    if (embeddingRepository.existsByArticle(article)) {
-                        return true;
-                    }
-
-                    // 임베딩이 없으면 자동 생성 시도
-                    log.info("기사 ID {}에 임베딩이 없어 자동 생성 시도", article.getId());
-                    try {
-                        embeddingService.generateAndSaveEmbedding(article);
-                        return embeddingRepository.existsByArticle(article);
-                    } catch (Exception e) {
-                        log.error("기사 ID {} 임베딩 생성 실패: {}", article.getId(), e.getMessage());
-                        return false;
-                    }
-                })
-                .collect(Collectors.toList());
-
-        log.info("임베딩이 있는 기사 수 (자동 생성 포함): {}", articlesWithEmbedding.size());
-
-        if (articlesWithEmbedding.isEmpty()) {
-            log.warn("임베딩이 있는 기사가 없어 리포트 생성 불가: {} (자동 생성도 실패)", targetDate);
-            return null;
-        }
-
-        // 4. 토픽 클러스터링 수행
-        List<TopicCluster> topicClusters = performTopicClustering(articlesWithEmbedding);
-        log.info("토픽 클러스터 수: {}", topicClusters.size());
-
-        // 5. Executive Summary 생성
-        String executiveSummary = generateExecutiveSummary(articlesWithEmbedding, topicClusters);
-
-        // 6. 키 트렌드 추출
-        String keyTrends = extractKeyTrends(articlesWithEmbedding);
-
-        // 7. 토픽 요약 생성
-        String topicSummaries = generateTopicSummaries(topicClusters);
-
-        // 8. DailyReport 엔티티 생성 및 저장
-        DailyReport report = DailyReport.builder()
-                .reportDate(targetDate)
-                .executiveSummary(executiveSummary)
-                .keyTrends(keyTrends)
-                .topicSummaries(topicSummaries)
-                .topicClusters(serializeTopicClusters(topicClusters))
-                .totalArticles(articlesWithEmbedding.size())
-                .highImportanceArticles(articlesWithEmbedding.size())
-                .status(DailyReport.ReportStatus.COMPLETED)
-                .build();
-
-        // 기사와 연결
-        report.setArticles(articlesWithEmbedding);
-
-        DailyReport savedReport = reportRepository.save(report);
-        log.info("일일 리포트 생성 완료: {} (ID: {})", targetDate, savedReport.getId());
-
-        return savedReport;
     }
 
     /**
-     * 토픽 클러스터링 수행
-     * - 간단한 유사도 기반 클러스터링 (K-means 대신 greedy approach)
+     * 오류 리포트 생성
      */
-    private List<TopicCluster> performTopicClustering(List<NewsArticle> articles) {
+    private DailyReport createErrorReport(LocalDate targetDate, String errorMessage) {
+        DailyReport errorReport = DailyReport.builder()
+                .reportDate(targetDate)
+                .executiveSummary("리포트 생성 실패: " + errorMessage)
+                .status(DailyReport.ReportStatus.FAILED)
+                .errorMessage(errorMessage)
+                .totalArticles(0)
+                .highImportanceArticles(0)
+                .build();
+        return reportRepository.save(errorReport);
+    }
+
+    /**
+     * 계층적 클러스터링 (Hierarchical Agglomerative Clustering)
+     * - 모든 기사 쌍의 유사도 계산
+     * - similarityThreshold 이상인 기사들을 클러스터로 그룹화
+     *
+     * @param articles 클러스터링할 기사 목록
+     * @param similarityThreshold 클러스터링 유사도 임계값 (0.0 ~ 1.0)
+     * @return 토픽 클러스터 목록
+     */
+    private List<TopicCluster> performHierarchicalClustering(
+            List<NewsArticle> articles,
+            double similarityThreshold
+    ) {
+        log.info("계층적 클러스터링 시작: 기사 {}개, 임계값 {}", articles.size(), similarityThreshold);
+
         List<TopicCluster> clusters = new ArrayList<>();
         Set<Long> processedArticleIds = new HashSet<>();
 
-        // 각 기사를 중심으로 유사한 기사를 찾아 클러스터 생성
+        // 각 기사에 대해 유사한 기사들을 재귀적으로 추가
         for (NewsArticle article : articles) {
             if (processedArticleIds.contains(article.getId())) {
                 continue;
             }
 
-            // 유사 기사 찾기 (유사도 > 0.7)
-            List<Map<String, Object>> similarArticles = embeddingService.findSimilarArticles(
-                    article.getId(),
-                    10  // 최대 10개
-            );
-
+            // 새 클러스터 생성
             List<NewsArticle> clusterArticles = new ArrayList<>();
-            clusterArticles.add(article);
+            Queue<NewsArticle> queue = new LinkedList<>();
+
+            queue.offer(article);
             processedArticleIds.add(article.getId());
+            clusterArticles.add(article);
 
-            // 유사도가 높은 기사를 클러스터에 추가
-            for (Map<String, Object> similar : similarArticles) {
-                Long similarArticleId = (Long) similar.get("articleId");
-                Double similarity = (Double) similar.get("similarity");
+            // BFS로 유사한 기사들 추가
+            while (!queue.isEmpty()) {
+                NewsArticle current = queue.poll();
 
-                if (similarity > 0.7 && !processedArticleIds.contains(similarArticleId)) {
-                    NewsArticle similarArticle = articleRepository.findById(similarArticleId).orElse(null);
-                    if (similarArticle != null) {
-                        clusterArticles.add(similarArticle);
-                        processedArticleIds.add(similarArticleId);
+                // 현재 기사와 유사한 기사 찾기
+                List<Map<String, Object>> similarArticles = embeddingService.findSimilarArticles(
+                        current.getId(),
+                        20  // 최대 20개 검색
+                );
+
+                for (Map<String, Object> similar : similarArticles) {
+                    Long similarId = (Long) similar.get("articleId");
+                    Double similarity = (Double) similar.get("similarity");
+
+                    // 유사도가 임계값 이상이고 아직 처리되지 않은 기사
+                    if (similarity >= similarityThreshold && !processedArticleIds.contains(similarId)) {
+                        NewsArticle similarArticle = articleRepository.findById(similarId).orElse(null);
+                        if (similarArticle != null && articles.contains(similarArticle)) {
+                            processedArticleIds.add(similarId);
+                            clusterArticles.add(similarArticle);
+                            queue.offer(similarArticle);
+                        }
                     }
                 }
             }
 
-            // 클러스터 생성 (최소 1개 이상의 기사)
+            // 클러스터 생성
             if (!clusterArticles.isEmpty()) {
                 TopicCluster cluster = new TopicCluster();
                 cluster.setArticles(clusterArticles);
-                cluster.setTopicName(extractTopicName(clusterArticles));
                 clusters.add(cluster);
             }
         }
@@ -179,66 +244,322 @@ public class DailyReportService {
         // 클러스터 크기 기준 정렬 (큰 것부터)
         clusters.sort((c1, c2) -> Integer.compare(c2.getArticles().size(), c1.getArticles().size()));
 
+        log.info("계층적 클러스터링 완료: {}개 클러스터 생성", clusters.size());
         return clusters;
     }
 
     /**
-     * 클러스터에서 토픽 이름 추출
-     * - 가장 많이 등장하는 키워드 기반
+     * 의미적 토픽명 생성 (Centroid 기반)
+     * - 클러스터의 대표 기사 찾기 (centroid에 가장 가까운 기사)
+     *
+     * @param clusterArticles 클러스터 내 기사 목록
+     * @return 토픽 이름
      */
-    private String extractTopicName(List<NewsArticle> articles) {
-        // 제목에서 키워드 추출 (간단한 버전)
-        Map<String, Integer> keywordFrequency = new HashMap<>();
+    private String extractSemanticTopicName(List<NewsArticle> clusterArticles) {
+        if (clusterArticles.isEmpty()) {
+            return "기타";
+        }
 
-        for (NewsArticle article : articles) {
+        if (clusterArticles.size() == 1) {
+            NewsArticle article = clusterArticles.get(0);
             String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
-            if (title != null) {
-                String[] words = title.split("\\s+");
-                for (String word : words) {
-                    if (word.length() > 2) {  // 2글자 이상만
-                        keywordFrequency.put(word, keywordFrequency.getOrDefault(word, 0) + 1);
-                    }
+            return title.length() > 40 ? title.substring(0, 40) + "..." : title;
+        }
+
+        // 클러스터 내에서 다른 모든 기사와의 평균 유사도가 가장 높은 기사 찾기
+        NewsArticle representative = null;
+        double maxAvgSimilarity = -1.0;
+
+        for (NewsArticle candidate : clusterArticles) {
+            List<Map<String, Object>> similarities = embeddingService.findSimilarArticles(
+                    candidate.getId(),
+                    clusterArticles.size()
+            );
+
+            // 클러스터 내 기사들과의 평균 유사도 계산
+            double avgSimilarity = similarities.stream()
+                    .filter(sim -> clusterArticles.stream()
+                            .anyMatch(a -> a.getId().equals(sim.get("articleId"))))
+                    .mapToDouble(sim -> (Double) sim.get("similarity"))
+                    .average()
+                    .orElse(0.0);
+
+            if (avgSimilarity > maxAvgSimilarity) {
+                maxAvgSimilarity = avgSimilarity;
+                representative = candidate;
+            }
+        }
+
+        if (representative != null) {
+            String title = representative.getTitleKo() != null
+                    ? representative.getTitleKo()
+                    : representative.getTitle();
+            return title.length() > 40 ? title.substring(0, 40) + "..." : title;
+        }
+
+        return "기타";
+    }
+
+    /**
+     * 트렌드 분석 (7일 전 vs 최근)
+     * - 신규 등장 토픽
+     * - 증가 중인 토픽
+     * - 감소 중인 토픽
+     */
+    private TrendAnalysis analyzeTrends(LocalDate targetDate, List<NewsArticle> recentArticles) {
+        TrendAnalysis analysis = new TrendAnalysis();
+
+        // 7일 이전 기사 조회 (비교 기준)
+        LocalDateTime sevenDaysAgo = targetDate.minusDays(7).atStartOfDay();
+        LocalDateTime fourteenDaysAgo = targetDate.minusDays(14).atStartOfDay();
+
+        List<NewsArticle> oldArticles = articleRepository.findByImportanceAndCrawledAtBetween(
+                NewsArticle.ArticleImportance.HIGH,
+                fourteenDaysAgo,
+                sevenDaysAgo
+        ).stream()
+                .filter(article -> embeddingRepository.existsByArticle(article))
+                .collect(Collectors.toList());
+
+        log.info("트렌드 분석: 최근 {}개, 과거(7-14일전) {}개",
+                recentArticles.size(), oldArticles.size());
+
+        // 카테고리별 기사 수 비교
+        Map<NewsArticle.ArticleCategory, Integer> recentCategoryCounts = recentArticles.stream()
+                .filter(a -> a.getCategory() != null)
+                .collect(Collectors.groupingBy(
+                        NewsArticle::getCategory,
+                        Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                ));
+
+        Map<NewsArticle.ArticleCategory, Integer> oldCategoryCounts = oldArticles.stream()
+                .filter(a -> a.getCategory() != null)
+                .collect(Collectors.groupingBy(
+                        NewsArticle::getCategory,
+                        Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                ));
+
+        // 트렌드 분류
+        for (NewsArticle.ArticleCategory category : recentCategoryCounts.keySet()) {
+            int recentCount = recentCategoryCounts.get(category);
+            int oldCount = oldCategoryCounts.getOrDefault(category, 0);
+
+            if (oldCount == 0) {
+                // 신규 등장
+                analysis.emergingTopics.add(category.name());
+            } else {
+                double growthRate = ((double) (recentCount - oldCount) / oldCount) * 100;
+                if (growthRate > 50) {
+                    // 50% 이상 증가
+                    analysis.hotTopics.add(category.name());
+                } else if (growthRate < -30) {
+                    // 30% 이상 감소
+                    analysis.decliningTopics.add(category.name());
+                } else {
+                    // 안정적
+                    analysis.stableTopics.add(category.name());
                 }
             }
         }
 
-        // 가장 빈도가 높은 키워드 찾기
-        return keywordFrequency.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse("기타");
+        return analysis;
     }
 
     /**
-     * Executive Summary 생성 (간단한 버전)
-     * TODO: Claude CLI를 사용한 AI 기반 요약으로 개선 필요
+     * Claude AI를 활용한 Executive Summary 생성
+     * - 전체 리포트의 핵심 요약 (A4 절반 분량)
      */
-    private String generateExecutiveSummary(List<NewsArticle> articles, List<TopicCluster> clusters) {
-        StringBuilder summary = new StringBuilder();
-        summary.append(String.format("오늘 총 %d개의 주요 AI 뉴스가 수집되었습니다. ", articles.size()));
+    private String generateAIExecutiveSummary(
+            LocalDate targetDate,
+            List<NewsArticle> articles,
+            List<TopicCluster> clusters,
+            TrendAnalysis trendAnalysis
+    ) {
+        log.info("Claude AI Executive Summary 생성 시작");
 
-        if (!clusters.isEmpty()) {
-            summary.append(String.format("%d개의 주요 토픽으로 분류되었으며, ", clusters.size()));
+        try {
+            // 상위 5개 클러스터의 대표 기사만 사용 (토큰 절약)
+            List<String> topArticleSummaries = clusters.stream()
+                    .limit(5)
+                    .map(cluster -> {
+                        NewsArticle representative = cluster.getArticles().get(0);
+                        return String.format("【%s】%s: %s",
+                                cluster.getTopicName(),
+                                representative.getTitleKo() != null
+                                        ? representative.getTitleKo()
+                                        : representative.getTitle(),
+                                representative.getSummary() != null
+                                        ? representative.getSummary()
+                                        : "요약 없음"
+                        );
+                    })
+                    .collect(Collectors.toList());
 
-            // 상위 3개 토픽 언급
-            for (int i = 0; i < Math.min(clusters.size(), 3); i++) {
-                TopicCluster cluster = clusters.get(i);
-                summary.append(String.format("\"%s\" 관련 %d개 기사",
-                    cluster.getTopicName(), cluster.getArticles().size()));
-                if (i < Math.min(clusters.size(), 3) - 1) {
-                    summary.append(", ");
-                }
+            String prompt = String.format("""
+                    당신은 AI 업계 전문 애널리스트입니다. 최근 7일간의 주요 AI 뉴스를 분석하여 경영진용 Executive Summary를 작성해주세요.
+
+                    **분석 기간**: %s 기준 최근 7일
+                    **분석 대상**: 중요도 HIGH 기사 %d개
+                    **식별된 주요 토픽**: %d개
+
+                    **트렌드 분석**:
+                    - 신규 등장 분야: %s
+                    - 급성장 분야: %s
+                    - 감소 분야: %s
+
+                    **주요 토픽별 대표 기사**:
+                    %s
+
+                    다음 형식으로 **A4 절반 분량(약 1000자)**의 Executive Summary를 한국어로 작성해주세요:
+
+                    ## 핵심 요약 (2-3문장)
+                    이번 주 AI 업계의 가장 중요한 변화와 핵심 메시지를 간결하게 요약
+
+                    ## 주요 동향
+                    1. [토픽명]: 핵심 내용과 시사점 (2-3문장)
+                    2. [토픽명]: 핵심 내용과 시사점 (2-3문장)
+                    3. [토픽명]: 핵심 내용과 시사점 (2-3문장)
+
+                    ## 트렌드 인사이트
+                    - 신규/급성장 분야에 대한 분석과 전망
+                    - 업계 전반에 미칠 영향 평가
+
+                    ## 향후 전망
+                    단기적(1-2주) 전망과 주목해야 할 포인트
+
+                    주의사항:
+                    - 구체적인 사실과 숫자 기반으로 작성
+                    - 마케팅성 과장 표현 지양
+                    - 실무자가 실행 가능한 인사이트 제공
+                    - 한국어로 작성
+                    """,
+                    targetDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일")),
+                    articles.size(),
+                    clusters.size(),
+                    trendAnalysis.emergingTopics.isEmpty() ? "없음" : String.join(", ", trendAnalysis.emergingTopics),
+                    trendAnalysis.hotTopics.isEmpty() ? "없음" : String.join(", ", trendAnalysis.hotTopics),
+                    trendAnalysis.decliningTopics.isEmpty() ? "없음" : String.join(", ", trendAnalysis.decliningTopics),
+                    String.join("\n\n", topArticleSummaries)
+            );
+
+            String summary = callClaudeCLI(prompt);
+            log.info("Claude AI Executive Summary 생성 완료: {}자", summary.length());
+            return summary;
+
+        } catch (Exception e) {
+            log.error("Claude AI Executive Summary 생성 실패", e);
+            return generateFallbackExecutiveSummary(articles, clusters);
+        }
+    }
+
+    /**
+     * Claude CLI 호출
+     */
+    private String callClaudeCLI(String prompt) throws Exception {
+        int timeout = aiConfig.getClaudeCli().getTimeout();
+        String claudeCommand = aiConfig.getClaudeCli().getCommand();
+
+        ProcessBuilder pb = new ProcessBuilder(claudeCommand, "--headless");
+        pb.redirectErrorStream(true);
+
+        Process process = pb.start();
+
+        // 프롬프트 전송
+        try (OutputStreamWriter writer = new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8)) {
+            writer.write(prompt);
+            writer.flush();
+        }
+
+        // 타임아웃과 함께 응답 대기
+        boolean finished = process.waitFor(timeout, TimeUnit.SECONDS);
+
+        if (!finished) {
+            process.destroyForcibly();
+            throw new RuntimeException("Claude CLI 타임아웃: " + timeout + "초 초과");
+        }
+
+        // 응답 읽기
+        StringBuilder response = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line).append("\n");
             }
-            summary.append("가 가장 많이 보도되었습니다.");
+        }
+
+        int exitCode = process.exitValue();
+        if (exitCode != 0) {
+            throw new RuntimeException("Claude CLI 실행 실패 (exit code: " + exitCode + ")");
+        }
+
+        return response.toString().trim();
+    }
+
+    /**
+     * Fallback Executive Summary (AI 실패 시)
+     */
+    private String generateFallbackExecutiveSummary(List<NewsArticle> articles, List<TopicCluster> clusters) {
+        StringBuilder summary = new StringBuilder();
+        summary.append(String.format("## 주간 AI 뉴스 요약\n\n"));
+        summary.append(String.format("최근 7일간 총 %d개의 주요 AI 뉴스가 수집되었으며, %d개의 토픽으로 분류되었습니다.\n\n",
+                articles.size(), clusters.size()));
+
+        summary.append("## 주요 토픽\n\n");
+        for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
+            TopicCluster cluster = clusters.get(i);
+            summary.append(String.format("%d. **%s** (%d건)\n",
+                    i + 1, cluster.getTopicName(), cluster.getArticles().size()));
         }
 
         return summary.toString();
     }
 
     /**
-     * 키 트렌드 추출 (JSON 형식)
+     * 토픽별 AI 요약 생성 (각 토픽당 2-3문장)
      */
-    private String extractKeyTrends(List<NewsArticle> articles) {
+    private String generateAITopicSummaries(List<TopicCluster> clusters) {
+        List<Map<String, Object>> summaries = new ArrayList<>();
+
+        for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
+            TopicCluster cluster = clusters.get(i);
+
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("topic", cluster.getTopicName());
+            summary.put("articleCount", cluster.getArticles().size());
+
+            // 대표 기사 제목 목록
+            List<String> titles = cluster.getArticles().stream()
+                    .limit(3)
+                    .map(article -> article.getTitleKo() != null ? article.getTitleKo() : article.getTitle())
+                    .collect(Collectors.toList());
+            summary.put("representativeTitles", titles);
+
+            // 카테고리 분포
+            Map<String, Integer> categoryDist = cluster.getArticles().stream()
+                    .filter(a -> a.getCategory() != null)
+                    .collect(Collectors.groupingBy(
+                            a -> a.getCategory().name(),
+                            Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                    ));
+            summary.put("categories", categoryDist);
+
+            summaries.add(summary);
+        }
+
+        try {
+            return objectMapper.writeValueAsString(summaries);
+        } catch (JsonProcessingException e) {
+            log.error("토픽 요약 JSON 변환 실패", e);
+            return "[]";
+        }
+    }
+
+    /**
+     * TF-IDF 기반 키워드 추출
+     */
+    private String extractTFIDFKeyTrends(List<NewsArticle> articles) {
+        // 간단한 키워드 빈도 분석 (TF-IDF는 전체 코퍼스 필요)
         Map<String, Integer> keywordFrequency = new HashMap<>();
 
         for (NewsArticle article : articles) {
@@ -246,17 +567,16 @@ public class DailyReportService {
             if (title != null) {
                 String[] words = title.split("\\s+");
                 for (String word : words) {
-                    if (word.length() > 2) {
+                    if (word.length() > 2 && !isStopWord(word)) {
                         keywordFrequency.put(word, keywordFrequency.getOrDefault(word, 0) + 1);
                     }
                 }
             }
         }
 
-        // 상위 10개 키워드 추출
         List<Map<String, Object>> trends = keywordFrequency.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(10)
+                .limit(15)
                 .map(entry -> {
                     Map<String, Object> trend = new HashMap<>();
                     trend.put("keyword", entry.getKey());
@@ -274,48 +594,80 @@ public class DailyReportService {
     }
 
     /**
-     * 토픽별 요약 생성
+     * 불용어 체크 (간단 버전)
      */
-    private String generateTopicSummaries(List<TopicCluster> clusters) {
-        List<Map<String, Object>> summaries = new ArrayList<>();
+    private boolean isStopWord(String word) {
+        Set<String> stopWords = Set.of("the", "is", "at", "which", "on", "a", "an", "and", "or", "but",
+                "이", "그", "저", "것", "수", "등", "및", "를", "을", "가", "이", "에", "의", "와");
+        return stopWords.contains(word.toLowerCase());
+    }
 
-        for (TopicCluster cluster : clusters) {
-            Map<String, Object> summary = new HashMap<>();
-            summary.put("topic", cluster.getTopicName());
-            summary.put("articleCount", cluster.getArticles().size());
-
-            // 대표 기사 제목
-            List<String> titles = cluster.getArticles().stream()
-                    .limit(3)
-                    .map(article -> article.getTitleKo() != null ? article.getTitleKo() : article.getTitle())
-                    .collect(Collectors.toList());
-            summary.put("representativeTitles", titles);
-
-            summaries.add(summary);
-        }
+    /**
+     * 카테고리 분포 계산
+     */
+    private String calculateCategoryDistribution(List<NewsArticle> articles) {
+        Map<String, Integer> distribution = articles.stream()
+                .filter(a -> a.getCategory() != null)
+                .collect(Collectors.groupingBy(
+                        a -> a.getCategory().name(),
+                        Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                ));
 
         try {
-            return objectMapper.writeValueAsString(summaries);
+            return objectMapper.writeValueAsString(distribution);
         } catch (JsonProcessingException e) {
-            log.error("토픽 요약 JSON 변환 실패", e);
-            return "[]";
+            log.error("카테고리 분포 JSON 변환 실패", e);
+            return "{}";
         }
     }
 
     /**
-     * 토픽 클러스터를 JSON으로 직렬화
+     * 평균 관련성 점수 계산
+     */
+    private double calculateAvgRelevanceScore(List<NewsArticle> articles) {
+        return articles.stream()
+                .filter(a -> a.getRelevanceScore() != null)
+                .mapToDouble(NewsArticle::getRelevanceScore)
+                .average()
+                .orElse(0.0);
+    }
+
+    /**
+     * 리포트 품질 점수 계산
+     * - 기사 품질, 다양성, 클러스터 품질 고려
+     */
+    private double calculateReportQualityScore(List<NewsArticle> articles, List<TopicCluster> clusters) {
+        double score = 0.0;
+
+        // 1. 기사 수 (30% 가중치)
+        double articleScore = Math.min(articles.size() / 30.0, 1.0) * 0.3;
+
+        // 2. 클러스터 다양성 (30% 가중치)
+        double diversityScore = Math.min(clusters.size() / 8.0, 1.0) * 0.3;
+
+        // 3. 평균 관련성 점수 (40% 가중치)
+        double relevanceScore = calculateAvgRelevanceScore(articles) * 0.4;
+
+        score = articleScore + diversityScore + relevanceScore;
+
+        return Math.min(score, 1.0);
+    }
+
+    /**
+     * 토픽 클러스터 직렬화
      */
     private String serializeTopicClusters(List<TopicCluster> clusters) {
-        List<Map<String, Object>> serialized = new ArrayList<>();
-
-        for (TopicCluster cluster : clusters) {
-            Map<String, Object> clusterMap = new HashMap<>();
-            clusterMap.put("topic", cluster.getTopicName());
-            clusterMap.put("articleIds", cluster.getArticles().stream()
-                    .map(NewsArticle::getId)
-                    .collect(Collectors.toList()));
-            serialized.add(clusterMap);
-        }
+        List<Map<String, Object>> serialized = clusters.stream()
+                .map(cluster -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("topic", cluster.getTopicName());
+                    map.put("articleCount", cluster.getArticles().size());
+                    map.put("articleIds", cluster.getArticles().stream()
+                            .map(NewsArticle::getId)
+                            .collect(Collectors.toList()));
+                    return map;
+                })
+                .collect(Collectors.toList());
 
         try {
             return objectMapper.writeValueAsString(serialized);
@@ -347,6 +699,16 @@ public class DailyReportService {
         public void setArticles(List<NewsArticle> articles) {
             this.articles = articles;
         }
+    }
+
+    /**
+     * 트렌드 분석 결과
+     */
+    private static class TrendAnalysis {
+        List<String> emergingTopics = new ArrayList<>();     // 신규 등장
+        List<String> hotTopics = new ArrayList<>();          // 급증
+        List<String> decliningTopics = new ArrayList<>();    // 감소
+        List<String> stableTopics = new ArrayList<>();       // 안정적
     }
 
     /**
