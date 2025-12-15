@@ -72,7 +72,9 @@ public class SecurityConfig {
                                 "/api/dashboard/**",
                                 "/api/news-articles/**",
                                 // 프런트에서 사용하는 기사 조회 엔드포인트 전체 공개
-                                "/api/articles/**"
+                                "/api/articles/**",
+                                // 임베딩 생성 엔드포인트 공개
+                                "/api/embeddings/**"
                         ).permitAll()
                         // All other API endpoints require authentication
                         .requestMatchers("/api/**").authenticated()
