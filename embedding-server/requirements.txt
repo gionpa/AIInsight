@@ -1,0 +1,13 @@
+# FastAPI 웹 프레임워크
+fastapi>=0.104.0,<0.105.0
+uvicorn[standard]>=0.24.0,<0.25.0
+
+# 임베딩 모델 (최신 버전으로 업데이트)
+sentence-transformers>=2.3.0,<3.0.0
+
+# PyTorch CPU 전용 (경량 버전)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.1.0,<2.2.0
+
+# 기타 필수 의존성
+numpy>=1.24.0,<2.0.0
