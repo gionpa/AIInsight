@@ -66,6 +66,10 @@ public class AiConfig {
 
     @Bean
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        // 타임아웃 설정을 포함한 RestTemplate 생성
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000); // 연결 타임아웃: 10초
+        factory.setReadTimeout(60000); // 읽기 타임아웃: 60초 (임베딩 생성은 시간이 걸릴 수 있음)
+        return new RestTemplate(factory);
     }
 }
