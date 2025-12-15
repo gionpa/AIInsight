@@ -598,7 +598,7 @@ public class DailyReportService {
      */
     private boolean isStopWord(String word) {
         Set<String> stopWords = Set.of("the", "is", "at", "which", "on", "a", "an", "and", "or", "but",
-                "이", "그", "저", "것", "수", "등", "및", "를", "을", "가", "이", "에", "의", "와");
+                "이", "그", "저", "것", "수", "등", "및", "를", "을", "가", "에", "의", "와");
         return stopWords.contains(word.toLowerCase());
     }
 
