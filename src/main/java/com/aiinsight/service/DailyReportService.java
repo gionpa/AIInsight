@@ -512,14 +512,10 @@ public class DailyReportService {
     /**
      * Fallback Executive Summary (AI 실패 시)
      * - Railway 프로덕션 환경에서 사용됨
+     * - A4 절반 분량 (~1500자)의 구조화된 리포트
      */
     private String generateFallbackExecutiveSummary(List<NewsArticle> articles, List<TopicCluster> clusters) {
         StringBuilder summary = new StringBuilder();
-
-        // 1. 핵심 요약
-        summary.append("## 1. Executive Summary\n\n");
-        summary.append(String.format("최근 30일간 중요도 HIGH로 분류된 %d개의 AI 뉴스를 분석한 결과, ", articles.size()));
-        summary.append(String.format("%d개의 주요 토픽이 식별되었습니다. ", clusters.size()));
 
         // 카테고리 분포 분석
         Map<String, Integer> categoryDist = articles.stream()
@@ -529,53 +525,319 @@ public class DailyReportService {
                         Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
                 ));
 
-        if (!categoryDist.isEmpty()) {
-            String topCategory = categoryDist.entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .map(Map.Entry::getKey)
-                    .orElse("기타");
-            summary.append(String.format("%s 분야가 가장 활발한 움직임을 보였습니다.\n\n", topCategory));
-        }
+        // === 1. 핵심 요약 ===
+        summary.append("## 핵심 요약\n\n");
+        summary.append(generateCoreSummary(articles, clusters, categoryDist));
+        summary.append("\n\n");
 
-        // 2. 주요 토픽 심층 분석
-        summary.append("## 2. 주요 토픽 심층 분석\n\n");
-        for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
-            TopicCluster cluster = clusters.get(i);
-            summary.append(String.format("### 토픽 %d: %s (기사 %d건)\n",
-                    i + 1, cluster.getTopicName(), cluster.getArticles().size()));
+        // === 2. 주요 토픽 심층 분석 (상위 5개) ===
+        summary.append("## 주요 토픽 심층 분석\n\n");
+        summary.append(generateTopicInsights(articles, clusters));
+        summary.append("\n\n");
 
-            // 대표 기사 제목
-            List<String> titles = cluster.getArticles().stream()
-                    .limit(3)
-                    .map(article -> article.getTitleKo() != null ? article.getTitleKo() : article.getTitle())
-                    .collect(Collectors.toList());
+        // === 3. 트렌드 인사이트 ===
+        summary.append("## 트렌드 인사이트\n\n");
+        summary.append(generateTrendInsights(articles, categoryDist));
+        summary.append("\n\n");
 
-            if (!titles.isEmpty()) {
-                summary.append("**주요 기사:**\n");
-                titles.forEach(title -> summary.append(String.format("- %s\n",
-                        title.length() > 60 ? title.substring(0, 60) + "..." : title)));
-            }
-            summary.append("\n");
-        }
-
-        // 3. 카테고리별 분포
-        summary.append("## 3. 카테고리별 분포\n\n");
+        // === 4. 카테고리별 분포 ===
+        summary.append("## 카테고리별 분포\n\n");
         categoryDist.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
-                .forEach(entry -> summary.append(String.format("- %s: %d건 (%.1f%%)\n",
-                        entry.getKey(),
-                        entry.getValue(),
-                        (entry.getValue() * 100.0) / articles.size())));
+                .limit(6)
+                .forEach(entry -> {
+                    String displayName = getCategoryDisplayName(entry.getKey());
+                    summary.append(String.format("- **%s**: %d건 (%.1f%%)\n",
+                            displayName,
+                            entry.getValue(),
+                            (entry.getValue() * 100.0) / articles.size()));
+                });
 
-        summary.append("\n");
+        summary.append("\n\n");
 
-        // 4. 향후 전망
-        summary.append("## 4. 향후 전망\n\n");
-        summary.append("- **단기 전망**: 현재 확인된 주요 토픽들의 지속적인 발전이 예상됩니다.\n");
-        summary.append("- **Action Items**: 주요 토픽별 상세 분석을 통해 비즈니스 영향도를 평가하시기 바랍니다.\n");
+        // === 5. 향후 전망 ===
+        summary.append("## 향후 전망\n\n");
+        summary.append(generateOutlook(categoryDist, clusters));
 
         return summary.toString();
+    }
+
+    /**
+     * 핵심 요약 생성 (2-3문장)
+     */
+    private String generateCoreSummary(List<NewsArticle> articles, List<TopicCluster> clusters, Map<String, Integer> categoryDist) {
+        StringBuilder core = new StringBuilder();
+
+        // 전체 통계
+        core.append(String.format("최근 30일간 **%d개**의 중요 AI 뉴스가 수집되었으며, ", articles.size()));
+        core.append(String.format("**%d개**의 주요 토픽이 식별되었습니다. ", clusters.size()));
+
+        // 상위 카테고리
+        if (!categoryDist.isEmpty()) {
+            Map.Entry<String, Integer> topCategory = categoryDist.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .orElse(null);
+
+            if (topCategory != null) {
+                String displayName = getCategoryDisplayName(topCategory.getKey());
+                core.append(String.format("**%s** 분야가 %d건으로 가장 활발한 움직임을 보였으며, ",
+                        displayName, topCategory.getValue()));
+            }
+        }
+
+        // 높은 관련성 기사 비율
+        long highRelevanceCount = articles.stream()
+                .filter(a -> a.getRelevanceScore() != null && a.getRelevanceScore() >= 0.8)
+                .count();
+
+        if (highRelevanceCount > 0) {
+            double percentage = (highRelevanceCount * 100.0) / articles.size();
+            core.append(String.format("전체 기사 중 %.0f%%가 높은 AI 관련성(0.8 이상)을 기록했습니다.", percentage));
+        } else {
+            core.append("다양한 AI 관련 이슈가 포괄적으로 다뤄지고 있습니다.");
+        }
+
+        return core.toString();
+    }
+
+    /**
+     * 상위 5개 토픽 심층 분석
+     */
+    private String generateTopicInsights(List<NewsArticle> articles, List<TopicCluster> clusters) {
+        StringBuilder insights = new StringBuilder();
+
+        for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
+            TopicCluster cluster = clusters.get(i);
+            insights.append(String.format("### %d. %s (%d건)\n\n",
+                    i + 1, cluster.getTopicName(), cluster.getArticles().size()));
+
+            // 카테고리 분포
+            Map<String, Long> clusterCategories = cluster.getArticles().stream()
+                    .filter(a -> a.getCategory() != null)
+                    .collect(Collectors.groupingBy(
+                            a -> a.getCategory().name(),
+                            Collectors.counting()
+                    ));
+
+            if (!clusterCategories.isEmpty()) {
+                String mainCategory = clusterCategories.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey)
+                        .orElse("기타");
+
+                insights.append(generateTopicCategoryDescription(mainCategory, cluster.getArticles().size()));
+                insights.append("\n\n");
+            }
+
+            // 주요 기사 (관련성 점수 순)
+            List<NewsArticle> topArticles = cluster.getArticles().stream()
+                    .sorted((a, b) -> Double.compare(
+                            b.getRelevanceScore() != null ? b.getRelevanceScore() : 0,
+                            a.getRelevanceScore() != null ? a.getRelevanceScore() : 0
+                    ))
+                    .limit(3)
+                    .collect(Collectors.toList());
+
+            if (!topArticles.isEmpty()) {
+                insights.append("**주요 기사**:\n");
+                topArticles.forEach(article -> {
+                    String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
+                    insights.append(String.format("- %s\n",
+                            title.length() > 70 ? title.substring(0, 70) + "..." : title));
+                });
+                insights.append("\n");
+            }
+        }
+
+        return insights.toString();
+    }
+
+    /**
+     * 토픽 카테고리별 맥락 설명
+     */
+    private String generateTopicCategoryDescription(String categoryKey, int articleCount) {
+        return switch (categoryKey) {
+            case "LLM" -> String.format(
+                    "대규모 언어 모델 분야에서 %d건의 혁신이 보고되었습니다. " +
+                            "GPT, Claude, Gemini 등 주요 모델의 성능 향상과 멀티모달 기능 강화가 두드러지며, " +
+                            "엔터프라이즈 AI 적용이 본격화되고 있습니다.",
+                    articleCount
+            );
+            case "COMPUTER_VISION" -> String.format(
+                    "컴퓨터 비전 기술 %d건의 발전이 확인되었습니다. " +
+                            "실시간 객체 인식, 3D 재구성, 의료 영상 분석 등 실용적 응용이 확대되고 있습니다.",
+                    articleCount
+            );
+            case "NLP" -> String.format(
+                    "자연어 처리 분야 %d건의 연구 성과가 발표되었습니다. " +
+                            "번역, 요약, 감정 분석 등 전통적 NLP 태스크의 성능이 지속적으로 향상되고 있습니다.",
+                    articleCount
+            );
+            case "INDUSTRY" -> String.format(
+                    "AI 산업 동향 %d건이 보도되었습니다. " +
+                            "투자, 인수합병, 전략적 파트너십 등 산업 재편이 활발하게 진행되고 있습니다.",
+                    articleCount
+            );
+            case "REGULATION" -> String.format(
+                    "AI 규제 및 정책 %d건이 발표되었습니다. " +
+                            "EU AI Act, 미국 행정명령 등 글로벌 규제 프레임워크가 구체화되고 있습니다.",
+                    articleCount
+            );
+            case "RESEARCH" -> String.format(
+                    "AI 연구 %d건이 발표되었습니다. " +
+                            "새로운 아키텍처, 학습 알고리즘, 평가 방법론 등 이론적 발전이 이루어지고 있습니다.",
+                    articleCount
+            );
+            default -> String.format(
+                    "해당 분야에서 %d건의 주요 발표가 있었습니다. " +
+                            "AI 기술의 다양한 응용과 발전이 지속되고 있습니다.",
+                    articleCount
+            );
+        };
+    }
+
+    /**
+     * 트렌드 인사이트 생성
+     */
+    private String generateTrendInsights(List<NewsArticle> articles, Map<String, Integer> categoryDist) {
+        StringBuilder trends = new StringBuilder();
+
+        // 카테고리 다양성 분석
+        int uniqueCategories = categoryDist.size();
+        trends.append(String.format("- **카테고리 다양성**: %d개 분야에서 뉴스가 발생하여 " +
+                "AI 생태계의 다각적 성장을 보여줍니다.\n\n", uniqueCategories));
+
+        // 평균 관련성 점수
+        double avgRelevance = articles.stream()
+                .filter(a -> a.getRelevanceScore() != null)
+                .mapToDouble(NewsArticle::getRelevanceScore)
+                .average()
+                .orElse(0.0);
+
+        trends.append(String.format("- **AI 관련성**: 평균 %.2f점으로, ", avgRelevance));
+        if (avgRelevance >= 0.85) {
+            trends.append("핵심 기술 중심의 높은 품질 뉴스가 수집되었습니다.\n\n");
+        } else if (avgRelevance >= 0.7) {
+            trends.append("AI 관련성이 높은 유의미한 뉴스가 수집되었습니다.\n\n");
+        } else {
+            trends.append("다양한 관점에서 AI 이슈가 다뤄지고 있습니다.\n\n");
+        }
+
+        // 핵심 키워드 트렌드
+        trends.append("- **핵심 키워드**: ");
+        List<String> keywords = extractMeaningfulKeywords(articles);
+        if (!keywords.isEmpty()) {
+            trends.append(String.join(", ", keywords))
+                    .append(" 등이 주요 화두입니다.\n\n");
+        } else {
+            trends.append("다양한 기술 키워드가 고르게 분포되어 있습니다.\n\n");
+        }
+
+        return trends.toString();
+    }
+
+    /**
+     * 의미 있는 키워드 추출 (불용어 제외)
+     */
+    private List<String> extractMeaningfulKeywords(List<NewsArticle> articles) {
+        // 확장된 불용어 목록
+        Set<String> stopWords = Set.of(
+                "ai", "인공지능", "개발", "발표", "출시", "공개", "새로운", "최신", "기술", "시스템",
+                "서비스", "플랫폼", "솔루션", "기업", "회사", "국내", "글로벌", "연구", "분석",
+                "이", "가", "을", "를", "의", "에", "와", "과", "도", "로", "으로", "는", "은",
+                "위한", "통해", "대한", "있는", "있다", "한다", "된다", "한", "등", "및", "또는"
+        );
+
+        Map<String, Integer> keywordFreq = new HashMap<>();
+
+        for (NewsArticle article : articles) {
+            String text = (article.getTitleKo() != null ? article.getTitleKo() : article.getTitle()) + " " +
+                    (article.getSummary() != null ? article.getSummary() : "");
+
+            // 단어 분리 (공백, 구두점, 괄호 등)
+            String[] words = text.split("[\\s,\\.\\-\\(\\)\\[\\]\"']+");
+
+            for (String word : words) {
+                String clean = word.trim().toLowerCase();
+
+                // 필터링: 길이, 불용어, 숫자 포함, 단일 문자
+                if (clean.length() >= 2 && clean.length() <= 20 &&
+                        !stopWords.contains(clean) &&
+                        !clean.matches(".*[0-9]+.*") &&
+                        !clean.matches("^[a-zA-Z가-힣]$")) {
+
+                    keywordFreq.put(clean, keywordFreq.getOrDefault(clean, 0) + 1);
+                }
+            }
+        }
+
+        // 빈도수 3회 이상, 상위 5개 선정
+        return keywordFreq.entrySet().stream()
+                .filter(e -> e.getValue() >= 3)
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(5)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 향후 전망 생성
+     */
+    private String generateOutlook(Map<String, Integer> categoryDist, List<TopicCluster> clusters) {
+        StringBuilder outlook = new StringBuilder();
+
+        // 가장 활발한 분야 기반 전망
+        if (!categoryDist.isEmpty()) {
+            Map.Entry<String, Integer> topCategory = categoryDist.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .orElse(null);
+
+            if (topCategory != null) {
+                String displayName = getCategoryDisplayName(topCategory.getKey());
+                outlook.append(String.format("**%s** 분야의 활발한 움직임은 ", displayName));
+
+                switch (topCategory.getKey()) {
+                    case "LLM" -> outlook.append("향후 GPT-5, Claude 4 등 차세대 모델 출시와 관련된 " +
+                            "추가 발표가 예상되며, 멀티모달 AI의 상용화가 본격화될 전망입니다.");
+                    case "COMPUTER_VISION" -> outlook.append("자율주행과 로보틱스 분야의 실용화가 가속화되고, " +
+                            "산업 현장에서의 AI 비전 시스템 도입이 확대될 것으로 보입니다.");
+                    case "REGULATION" -> outlook.append("글로벌 AI 규제 구체화로 기업들의 컴플라이언스 대응이 " +
+                            "핵심 이슈가 되며, 규제 준수 솔루션 시장이 성장할 것으로 예상됩니다.");
+                    case "INDUSTRY" -> outlook.append("AI 산업 재편이 계속되며, 인수합병과 전략적 파트너십이 " +
+                            "더욱 활발해질 전망입니다.");
+                    default -> outlook.append("해당 분야의 지속적 발전과 새로운 혁신이 기대됩니다.");
+                }
+
+                outlook.append("\n\n");
+            }
+        }
+
+        // 종합 전망
+        outlook.append("AI 기술은 빠르게 진화하고 있으며, 특히 실용적 응용과 산업 적용이 가속화되고 있습니다. " +
+                "향후 주요 기업들의 제품 발표와 학계의 연구 성과가 예정되어 있어, " +
+                "AI 생태계 전반의 역동적 변화가 계속될 것으로 예상됩니다.");
+
+        return outlook.toString();
+    }
+
+    /**
+     * 카테고리 한글명 반환
+     */
+    private String getCategoryDisplayName(String categoryKey) {
+        return switch (categoryKey) {
+            case "LLM" -> "대규모 언어 모델";
+            case "COMPUTER_VISION" -> "컴퓨터 비전";
+            case "NLP" -> "자연어 처리";
+            case "ROBOTICS" -> "로보틱스";
+            case "ML_OPS" -> "ML Ops";
+            case "RESEARCH" -> "연구/논문";
+            case "INDUSTRY" -> "산업 동향";
+            case "STARTUP" -> "스타트업";
+            case "REGULATION" -> "규제/정책";
+            case "TUTORIAL" -> "튜토리얼";
+            case "PRODUCT" -> "제품/서비스";
+            default -> "기타";
+        };
     }
 
     /**
