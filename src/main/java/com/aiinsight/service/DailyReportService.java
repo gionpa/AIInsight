@@ -96,9 +96,17 @@ public class DailyReportService {
             List<TopicCluster> topicClusters = performHierarchicalClustering(articlesWithEmbedding, 0.65);
             log.info("계층적 클러스터링 결과: {}개 토픽", topicClusters.size());
 
-            // 5. 각 클러스터에 대해 의미있는 토픽명 생성
+            // 5. Phase 1: 각 클러스터에 대해 TF-IDF 기반 키워드 추출 및 토픽명 생성
             for (TopicCluster cluster : topicClusters) {
-                cluster.setTopicName(extractSemanticTopicName(cluster.getArticles()));
+                // TF-IDF 키워드 추출
+                List<String> keywords = extractClusterKeywords(cluster.getArticles(), articlesWithEmbedding);
+                cluster.setKeywords(keywords);
+
+                // 키워드 기반 토픽 제목 생성
+                String topicTitle = generateKeywordBasedTitle(keywords, cluster.getArticles().size());
+                cluster.setTopicName(topicTitle);
+
+                log.debug("토픽 생성: {} (키워드: {})", topicTitle, String.join(", ", keywords));
             }
 
             // 6. 트렌드 분석 (7일 전 vs 오늘)
@@ -461,7 +469,7 @@ public class DailyReportService {
 
         } catch (Exception e) {
             log.error("Claude AI Executive Summary 생성 실패", e);
-            return generateFallbackExecutiveSummary(articles, clusters);
+            return generateFallbackExecutiveSummary(articles, clusters, trendAnalysis);
         }
     }
 
@@ -514,7 +522,7 @@ public class DailyReportService {
      * - Railway 프로덕션 환경에서 사용됨
      * - A4 절반 분량 (~1500자)의 구조화된 리포트
      */
-    private String generateFallbackExecutiveSummary(List<NewsArticle> articles, List<TopicCluster> clusters) {
+    private String generateFallbackExecutiveSummary(List<NewsArticle> articles, List<TopicCluster> clusters, TrendAnalysis trendAnalysis) {
         StringBuilder summary = new StringBuilder();
 
         // 카테고리 분포 분석
@@ -532,7 +540,7 @@ public class DailyReportService {
 
         // === 2. 주요 토픽 심층 분석 (상위 5개) ===
         summary.append("## 주요 토픽 심층 분석\n\n");
-        summary.append(generateTopicInsights(articles, clusters));
+        summary.append(generateTopicInsights(articles, clusters, trendAnalysis));
         summary.append("\n\n");
 
         // === 3. 트렌드 인사이트 ===
@@ -601,46 +609,37 @@ public class DailyReportService {
     }
 
     /**
-     * 상위 5개 토픽 심층 분석
+     * Phase 2 & 3: 상위 5개 토픽 심층 분석 (AI 요약 + 트렌드 뱃지 통합)
      */
-    private String generateTopicInsights(List<NewsArticle> articles, List<TopicCluster> clusters) {
+    private String generateTopicInsights(List<NewsArticle> articles, List<TopicCluster> clusters, TrendAnalysis trendAnalysis) {
         StringBuilder insights = new StringBuilder();
 
         for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
             TopicCluster cluster = clusters.get(i);
-            insights.append(String.format("### %d. %s (%d건)\n\n",
-                    i + 1, cluster.getTopicName(), cluster.getArticles().size()));
 
-            // 카테고리 분포
-            Map<String, Long> clusterCategories = cluster.getArticles().stream()
-                    .filter(a -> a.getCategory() != null)
-                    .collect(Collectors.groupingBy(
-                            a -> a.getCategory().name(),
-                            Collectors.counting()
-                    ));
+            // Phase 3: 트렌드 타입 및 뱃지 결정
+            String trendType = getTopicTrendType(cluster, trendAnalysis);
+            String trendBadge = getTrendBadge(trendType);
 
-            if (!clusterCategories.isEmpty()) {
-                String mainCategory = clusterCategories.entrySet().stream()
-                        .max(Map.Entry.comparingByValue())
-                        .map(Map.Entry::getKey)
-                        .orElse("기타");
+            // 토픽 제목 with 트렌드 뱃지
+            insights.append(String.format("### %d. %s%s\n\n",
+                    i + 1, cluster.getTopicName(), trendBadge));
 
-                insights.append(generateTopicCategoryDescription(mainCategory, cluster.getArticles().size()));
-                insights.append("\n\n");
-            }
+            // Phase 2: 대표 기사 선정 (Centroid 기반, 상위 3개)
+            List<NewsArticle> representativeArticles = selectRepresentativeArticles(cluster, 3);
 
-            // 주요 기사 (관련성 점수 순)
-            List<NewsArticle> topArticles = cluster.getArticles().stream()
-                    .sorted((a, b) -> Double.compare(
-                            b.getRelevanceScore() != null ? b.getRelevanceScore() : 0,
-                            a.getRelevanceScore() != null ? a.getRelevanceScore() : 0
-                    ))
-                    .limit(3)
-                    .collect(Collectors.toList());
+            // Phase 2: Claude AI를 활용한 토픽 요약 생성
+            String aiSummary = generateTopicSummaryWithAI(
+                    cluster.getTopicName(),
+                    representativeArticles,
+                    cluster.getKeywords()
+            );
+            insights.append(aiSummary).append("\n\n");
 
-            if (!topArticles.isEmpty()) {
+            // 주요 기사 링크 (대표 기사 기준)
+            if (!representativeArticles.isEmpty()) {
                 insights.append("**주요 기사**:\n");
-                topArticles.forEach(article -> {
+                representativeArticles.forEach(article -> {
                     String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
                     String displayTitle = title.length() > 70 ? title.substring(0, 70) + "..." : title;
 
@@ -785,6 +784,322 @@ public class DailyReportService {
                 .limit(5)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Phase 1: TF-IDF 기반 토픽 클러스터 키워드 추출
+     * @param clusterArticles 클러스터 내 기사 목록
+     * @param allArticles 전체 기사 목록 (IDF 계산용)
+     * @return 상위 5개 키워드 리스트
+     */
+    private List<String> extractClusterKeywords(List<NewsArticle> clusterArticles, List<NewsArticle> allArticles) {
+        // 확장된 불용어 목록 (60+ words)
+        Set<String> stopWords = Set.of(
+                "ai", "인공지능", "개발", "발표", "출시", "공개", "새로운", "최신", "기술", "시스템",
+                "서비스", "플랫폼", "솔루션", "기업", "회사", "국내", "글로벌", "연구", "분석",
+                "이", "가", "을", "를", "의", "에", "와", "과", "도", "로", "으로", "는", "은",
+                "위한", "통해", "대한", "있는", "있다", "한다", "된다", "한", "등", "및", "또는",
+                "것으로", "이는", "있습니다", "됩니다", "하는", "있으며", "모델", "것이", "하며",
+                "수", "등을", "것", "이다", "위해", "따른", "관련", "중", "더", "그", "매우",
+                "년", "월", "일", "시간", "이번", "오늘", "어제", "내일", "최근", "현재"
+        );
+
+        // Step 1: 클러스터 내 Term Frequency (TF) 계산
+        Map<String, Integer> clusterTF = new HashMap<>();
+        for (NewsArticle article : clusterArticles) {
+            String text = (article.getTitleKo() != null ? article.getTitleKo() : article.getTitle()) + " " +
+                    (article.getSummary() != null ? article.getSummary() : "");
+
+            String[] words = text.split("[\\s,\\.\\-\\(\\)\\[\\]\"']+");
+            for (String word : words) {
+                String clean = word.trim().toLowerCase();
+                if (clean.length() >= 2 && clean.length() <= 20 &&
+                        !stopWords.contains(clean) &&
+                        !clean.matches(".*[0-9]+.*")) {
+                    clusterTF.put(clean, clusterTF.getOrDefault(clean, 0) + 1);
+                }
+            }
+        }
+
+        // Step 2: Document Frequency (DF) 계산 - 전체 기사에서 해당 단어가 등장하는 문서 수
+        Map<String, Integer> documentFreq = new HashMap<>();
+        for (String term : clusterTF.keySet()) {
+            int df = 0;
+            for (NewsArticle article : allArticles) {
+                String text = (article.getTitleKo() != null ? article.getTitleKo() : article.getTitle()) + " " +
+                        (article.getSummary() != null ? article.getSummary() : "");
+                if (text.toLowerCase().contains(term)) {
+                    df++;
+                }
+            }
+            documentFreq.put(term, df);
+        }
+
+        // Step 3: TF-IDF 계산 = TF * log(N / DF)
+        int totalDocs = allArticles.size();
+        Map<String, Double> tfidfScores = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : clusterTF.entrySet()) {
+            String term = entry.getKey();
+            int tf = entry.getValue();
+            int df = documentFreq.getOrDefault(term, 1); // DF가 0인 경우 방지
+
+            double idf = Math.log((double) totalDocs / df);
+            double tfidf = tf * idf;
+            tfidfScores.put(term, tfidf);
+        }
+
+        // Step 4: TF-IDF 점수 기준으로 상위 5개 키워드 선정
+        return tfidfScores.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .limit(5)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Phase 1: 키워드 기반 토픽 제목 생성
+     * @param keywords 토픽 키워드 리스트
+     * @param articleCount 기사 수
+     * @return 키워드 기반 토픽 제목
+     */
+    private String generateKeywordBasedTitle(List<String> keywords, int articleCount) {
+        if (keywords.isEmpty()) {
+            return String.format("AI 관련 동향 (%d건)", articleCount);
+        }
+
+        String keywordStr = keywords.stream()
+                .limit(3)
+                .collect(Collectors.joining(", "));
+
+        return String.format("%s 관련 동향 (%d건)", keywordStr, articleCount);
+    }
+
+    /**
+     * Phase 2: 토픽 클러스터의 대표 기사 선정 (Centroid 기반)
+     * 클러스터 내 모든 기사와의 평균 유사도가 가장 높은 기사를 대표로 선정
+     * @param cluster 토픽 클러스터
+     * @param topN 선정할 기사 수
+     * @return 대표 기사 리스트
+     */
+    private List<NewsArticle> selectRepresentativeArticles(TopicCluster cluster, int topN) {
+        List<NewsArticle> clusterArticles = cluster.getArticles();
+
+        if (clusterArticles.size() <= topN) {
+            return clusterArticles;
+        }
+
+        // 각 기사의 평균 유사도 계산 (EmbeddingService 활용)
+        Map<NewsArticle, Double> avgSimilarities = new HashMap<>();
+
+        for (NewsArticle article : clusterArticles) {
+            // 해당 기사와 클러스터 내 다른 모든 기사와의 유사도 합계 계산
+            List<Map<String, Object>> similarArticles = embeddingService.findSimilarArticles(
+                    article.getId(),
+                    clusterArticles.size()
+            );
+
+            double totalSimilarity = 0.0;
+            int comparisonCount = 0;
+
+            // 클러스터 내 기사들과의 유사도만 합산
+            Set<Long> clusterArticleIds = clusterArticles.stream()
+                    .map(NewsArticle::getId)
+                    .collect(Collectors.toSet());
+
+            for (Map<String, Object> similar : similarArticles) {
+                Long similarId = (Long) similar.get("articleId");
+                Double similarity = (Double) similar.get("similarity");
+
+                // 클러스터 내 기사인 경우만 카운트
+                if (clusterArticleIds.contains(similarId)) {
+                    totalSimilarity += similarity;
+                    comparisonCount++;
+                }
+            }
+
+            if (comparisonCount > 0) {
+                double avgSimilarity = totalSimilarity / comparisonCount;
+                avgSimilarities.put(article, avgSimilarity);
+            }
+        }
+
+        // 평균 유사도 기준 상위 N개 선정
+        return avgSimilarities.entrySet().stream()
+                .sorted(Map.Entry.<NewsArticle, Double>comparingByValue().reversed())
+                .limit(topN)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Phase 2: Claude AI를 활용한 토픽 요약 생성
+     * 대표 기사들의 내용을 분석하여 2-3문장의 요약 생성
+     * @param topicName 토픽 제목
+     * @param representativeArticles 대표 기사 리스트
+     * @param keywords 토픽 키워드
+     * @return AI 생성 요약문 (2-3 sentences)
+     */
+    private String generateTopicSummaryWithAI(
+            String topicName,
+            List<NewsArticle> representativeArticles,
+            List<String> keywords
+    ) {
+        try {
+            // 대표 기사 정보 구성
+            StringBuilder articlesInfo = new StringBuilder();
+            for (int i = 0; i < representativeArticles.size(); i++) {
+                NewsArticle article = representativeArticles.get(i);
+                String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
+                String summary = article.getSummary() != null ? article.getSummary() : "";
+
+                articlesInfo.append(String.format("%d. %s\n%s\n\n", i + 1, title, summary));
+            }
+
+            // Claude AI 프롬프트 구성
+            String prompt = String.format(
+                    "다음은 '%s' 토픽의 대표 기사들입니다. 핵심 키워드는 [%s]입니다.\n\n" +
+                    "%s\n" +
+                    "이 토픽의 핵심 내용을 2-3문장으로 요약해주세요. 요약은 다음 조건을 만족해야 합니다:\n" +
+                    "1. 한국어로 작성\n" +
+                    "2. 2-3문장 이내\n" +
+                    "3. 핵심 키워드 포함\n" +
+                    "4. 기술적 세부사항 및 구체적 내용 포함\n" +
+                    "5. 마크다운 형식 불필요, 일반 텍스트로 작성\n\n" +
+                    "요약:",
+                    topicName,
+                    String.join(", ", keywords),
+                    articlesInfo.toString()
+            );
+
+            // Claude CLI 호출
+            String aiSummary = callClaudeCLIForSummary(prompt);
+
+            if (aiSummary != null && !aiSummary.trim().isEmpty()) {
+                log.info("AI 토픽 요약 생성 성공: {}", topicName);
+                return aiSummary.trim();
+            } else {
+                log.warn("AI 요약 생성 실패, 폴백 사용: {}", topicName);
+                return generateFallbackTopicDescription(representativeArticles, keywords);
+            }
+
+        } catch (Exception e) {
+            log.error("AI 토픽 요약 생성 중 오류 발생: {}", topicName, e);
+            return generateFallbackTopicDescription(representativeArticles, keywords);
+        }
+    }
+
+    /**
+     * Phase 2: Claude CLI 호출 (10초 타임아웃)
+     * @param prompt Claude AI 프롬프트
+     * @return AI 생성 응답
+     */
+    private String callClaudeCLIForSummary(String prompt) {
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    "claude", "--no-stream", prompt
+            );
+            processBuilder.redirectErrorStream(true);
+
+            Process process = processBuilder.start();
+
+            // 10초 타임아웃 설정
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroy();
+                log.warn("Claude CLI 타임아웃 (10초)");
+                throw new RuntimeException("Claude CLI timeout");
+            }
+
+            // 출력 읽기
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                return reader.lines().collect(Collectors.joining("\n"));
+            }
+
+        } catch (Exception e) {
+            log.error("Claude CLI 호출 실패", e);
+            throw new RuntimeException("Claude CLI call failed", e);
+        }
+    }
+
+    /**
+     * Phase 2: Fallback 토픽 설명 생성 (AI 실패 시)
+     * @param articles 대표 기사 리스트
+     * @param keywords 토픽 키워드
+     * @return 폴백 설명문
+     */
+    private String generateFallbackTopicDescription(List<NewsArticle> articles, List<String> keywords) {
+        if (articles.isEmpty()) {
+            return "관련 기사 정보가 부족합니다.";
+        }
+
+        String keywordStr = keywords.isEmpty() ? "AI 관련" : String.join(", ", keywords);
+        String category = articles.get(0).getCategory() != null
+                ? articles.get(0).getCategory().name()
+                : "GENERAL";
+
+        return String.format(
+                "%s 분야에서 %s 관련 동향이 보고되었습니다. " +
+                "주요 기사 %d건을 통해 최신 기술 발전 및 산업 동향을 확인할 수 있습니다.",
+                getCategoryDisplayName(category),
+                keywordStr,
+                articles.size()
+        );
+    }
+
+    /**
+     * Phase 3: 토픽의 트렌드 타입 결정
+     * @param cluster 토픽 클러스터
+     * @param trendAnalysis 트렌드 분석 결과
+     * @return 트렌드 타입 (NEW/HOT/DECLINING/STABLE)
+     */
+    private String getTopicTrendType(TopicCluster cluster, TrendAnalysis trendAnalysis) {
+        // 클러스터의 주요 카테고리 확인
+        Map<String, Long> clusterCategories = cluster.getArticles().stream()
+                .filter(a -> a.getCategory() != null)
+                .collect(Collectors.groupingBy(
+                        a -> a.getCategory().name(),
+                        Collectors.counting()
+                ));
+
+        if (clusterCategories.isEmpty()) {
+            return "STABLE";
+        }
+
+        String mainCategory = clusterCategories.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("기타");
+
+        // 신규 등장 토픽 체크
+        if (trendAnalysis.emergingTopics.contains(mainCategory)) {
+            return "NEW";
+        }
+
+        // 급증 토픽 체크
+        if (trendAnalysis.hotTopics.contains(mainCategory)) {
+            return "HOT";
+        }
+
+        // 감소 추세 체크
+        if (trendAnalysis.decliningTopics.contains(mainCategory)) {
+            return "DECLINING";
+        }
+
+        return "STABLE";
+    }
+
+    /**
+     * Phase 3: 트렌드 타입에 따른 뱃지 생성
+     * @param trendType 트렌드 타입
+     * @return 트렌드 뱃지 문자열
+     */
+    private String getTrendBadge(String trendType) {
+        return switch (trendType) {
+            case "NEW" -> " 🆕 **신규 등장**";
+            case "HOT" -> " 📈 **급상승**";
+            case "DECLINING" -> " 📉 **감소 추세**";
+            default -> "";
+        };
     }
 
     /**
@@ -1015,6 +1330,7 @@ public class DailyReportService {
     private static class TopicCluster {
         private String topicName;
         private List<NewsArticle> articles;
+        private List<String> keywords = new ArrayList<>();
 
         public String getTopicName() {
             return topicName;
@@ -1030,6 +1346,14 @@ public class DailyReportService {
 
         public void setArticles(List<NewsArticle> articles) {
             this.articles = articles;
+        }
+
+        public List<String> getKeywords() {
+            return keywords;
+        }
+
+        public void setKeywords(List<String> keywords) {
+            this.keywords = keywords;
         }
     }
 
