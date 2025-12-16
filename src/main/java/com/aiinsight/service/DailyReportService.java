@@ -644,8 +644,8 @@ public class DailyReportService {
                     String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
                     String displayTitle = title.length() > 70 ? title.substring(0, 70) + "..." : title;
 
-                    if (article.getSourceUrl() != null && !article.getSourceUrl().isEmpty()) {
-                        insights.append(String.format("- [%s](%s)\n", displayTitle, article.getSourceUrl()));
+                    if (article.getOriginalUrl() != null && !article.getOriginalUrl().isEmpty()) {
+                        insights.append(String.format("- [%s](%s)\n", displayTitle, article.getOriginalUrl()));
                     } else {
                         insights.append(String.format("- %s\n", displayTitle));
                     }
@@ -750,7 +750,9 @@ public class DailyReportService {
                 "ai", "인공지능", "개발", "발표", "출시", "공개", "새로운", "최신", "기술", "시스템",
                 "서비스", "플랫폼", "솔루션", "기업", "회사", "국내", "글로벌", "연구", "분석",
                 "이", "가", "을", "를", "의", "에", "와", "과", "도", "로", "으로", "는", "은",
-                "위한", "통해", "대한", "있는", "있다", "한다", "된다", "한", "등", "및", "또는"
+                "위한", "통해", "대한", "있는", "있다", "한다", "된다", "한", "등", "및", "또는",
+                "것으로", "이는", "있습니다", "됩니다", "하는", "있으며", "모델", "것이", "하며",
+                "수", "등을", "것", "이다", "위해", "따른", "관련", "중", "더", "그", "매우"
         );
 
         Map<String, Integer> keywordFreq = new HashMap<>();
