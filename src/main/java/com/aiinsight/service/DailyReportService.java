@@ -642,8 +642,13 @@ public class DailyReportService {
                 insights.append("**주요 기사**:\n");
                 topArticles.forEach(article -> {
                     String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
-                    insights.append(String.format("- %s\n",
-                            title.length() > 70 ? title.substring(0, 70) + "..." : title));
+                    String displayTitle = title.length() > 70 ? title.substring(0, 70) + "..." : title;
+
+                    if (article.getSourceUrl() != null && !article.getSourceUrl().isEmpty()) {
+                        insights.append(String.format("- [%s](%s)\n", displayTitle, article.getSourceUrl()));
+                    } else {
+                        insights.append(String.format("- %s\n", displayTitle));
+                    }
                 });
                 insights.append("\n");
             }

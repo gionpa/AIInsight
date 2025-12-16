@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
 import {
   getPhase3DailyReport,
   getCategoryReport,
@@ -720,16 +721,18 @@ export default function Report() {
       ) : viewMode === 'daily' && dailyReport ? (
         <div className="space-y-6">
           {/* Executive Summary */}
-          <div className="bg-gradient-to-r from-red-600 to-orange-500 rounded-xl p-6 text-white">
-            <div className="flex items-start gap-4">
-              <Sparkles className="w-8 h-8 flex-shrink-0 mt-1" />
-              <div>
-                <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-red-600 to-orange-500 p-4">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-6 h-6 text-white" />
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                   <span>Executive Summary</span>
                   <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">AI 분석</span>
                 </h2>
-                <p className="text-red-100 leading-relaxed">{dailyReport.executiveSummary}</p>
               </div>
+            </div>
+            <div className="p-6 prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-h2:text-xl prose-h2:mt-6 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-4 prose-h3:mb-2 prose-p:text-gray-700 prose-p:leading-relaxed prose-strong:text-gray-900 prose-strong:font-semibold prose-ul:my-2 prose-li:my-1 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
+              <ReactMarkdown>{dailyReport.executiveSummary}</ReactMarkdown>
             </div>
           </div>
 
