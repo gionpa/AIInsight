@@ -989,35 +989,54 @@ public class DailyReportService {
     }
 
     /**
-     * Phase 2: Claude CLI 호출 (10초 타임아웃)
+     * Phase 2: Claude CLI 호출 (15초 타임아웃)
      * @param prompt Claude AI 프롬프트
      * @return AI 생성 응답
      */
     private String callClaudeCLIForSummary(String prompt) {
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(
-                    "claude", "--no-stream", prompt
+                    "claude", "--print", prompt
             );
-            processBuilder.redirectErrorStream(true);
+            processBuilder.redirectErrorStream(false); // stderr 별도 처리
 
             Process process = processBuilder.start();
 
-            // 10초 타임아웃 설정
-            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+            // 15초 타임아웃 설정 (AI 응답 시간 고려)
+            if (!process.waitFor(15, TimeUnit.SECONDS)) {
                 process.destroy();
-                log.warn("Claude CLI 타임아웃 (10초)");
+                log.warn("Claude CLI 타임아웃 (15초)");
                 throw new RuntimeException("Claude CLI timeout");
             }
 
-            // 출력 읽기
+            // Exit code 확인
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                // 에러 출력 읽기
+                try (BufferedReader errorReader = new BufferedReader(
+                        new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                    String errorOutput = errorReader.lines().collect(Collectors.joining("\n"));
+                    log.error("Claude CLI 실행 실패 (exit code: {}): {}", exitCode, errorOutput);
+                }
+                throw new RuntimeException("Claude CLI failed with exit code: " + exitCode);
+            }
+
+            // 정상 출력 읽기
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                return reader.lines().collect(Collectors.joining("\n"));
+                String output = reader.lines().collect(Collectors.joining("\n"));
+
+                if (output == null || output.trim().isEmpty()) {
+                    log.warn("Claude CLI returned empty output");
+                    throw new RuntimeException("Claude CLI returned empty output");
+                }
+
+                return output.trim();
             }
 
         } catch (Exception e) {
             log.error("Claude CLI 호출 실패", e);
-            throw new RuntimeException("Claude CLI call failed", e);
+            throw new RuntimeException("Claude CLI call failed: " + e.getMessage(), e);
         }
     }
 
