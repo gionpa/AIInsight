@@ -875,8 +875,9 @@ public class DailyReportService {
     }
 
     /**
-     * Phase 2: 토픽 클러스터의 대표 기사 선정 (Centroid 기반)
-     * 클러스터 내 모든 기사와의 평균 유사도가 가장 높은 기사를 대표로 선정
+     * Phase 2: 토픽 클러스터의 대표 기사 선정 (Centroid 기반 + 중복 제거)
+     * 클러스터 내 모든 기사와의 평균 유사도가 가장 높은 기사를 대표로 선정하되,
+     * 이미 선정된 기사와 너무 유사한(>0.85) 기사는 제외하여 다양성 확보
      * @param cluster 토픽 클러스터
      * @param topN 선정할 기사 수
      * @return 대표 기사 리스트
@@ -923,12 +924,74 @@ public class DailyReportService {
             }
         }
 
-        // 평균 유사도 기준 상위 N개 선정
-        return avgSimilarities.entrySet().stream()
+        // 평균 유사도 기준 상위 후보 선정 (topN * 3개로 여유있게)
+        List<NewsArticle> candidates = avgSimilarities.entrySet().stream()
                 .sorted(Map.Entry.<NewsArticle, Double>comparingByValue().reversed())
-                .limit(topN)
+                .limit(topN * 3)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
+
+        // 중복 제거: 이미 선정된 기사와 유사도 0.85 이상인 기사 제외
+        List<NewsArticle> selectedArticles = new ArrayList<>();
+        double DUPLICATE_THRESHOLD = 0.85;  // 85% 이상 유사하면 중복으로 간주
+
+        for (NewsArticle candidate : candidates) {
+            if (selectedArticles.size() >= topN) {
+                break;
+            }
+
+            boolean isDuplicate = false;
+
+            // 이미 선정된 기사들과 유사도 체크
+            for (NewsArticle selected : selectedArticles) {
+                List<Map<String, Object>> similarities = embeddingService.findSimilarArticles(
+                        candidate.getId(),
+                        10
+                );
+
+                // 선정된 기사와의 유사도 확인
+                for (Map<String, Object> sim : similarities) {
+                    Long similarId = (Long) sim.get("articleId");
+                    Double similarity = (Double) sim.get("similarity");
+
+                    if (similarId.equals(selected.getId()) && similarity >= DUPLICATE_THRESHOLD) {
+                        isDuplicate = true;
+                        log.debug("중복 기사 제외: {} (유사도: {:.2f} with {})",
+                                candidate.getTitleKo() != null ? candidate.getTitleKo() : candidate.getTitle(),
+                                similarity,
+                                selected.getTitleKo() != null ? selected.getTitleKo() : selected.getTitle()
+                        );
+                        break;
+                    }
+                }
+
+                if (isDuplicate) {
+                    break;
+                }
+            }
+
+            // 중복이 아니면 선정
+            if (!isDuplicate) {
+                selectedArticles.add(candidate);
+            }
+        }
+
+        // 선정된 기사가 부족하면 남은 후보에서 채우기
+        if (selectedArticles.size() < topN && selectedArticles.size() < candidates.size()) {
+            for (NewsArticle candidate : candidates) {
+                if (selectedArticles.size() >= topN) {
+                    break;
+                }
+                if (!selectedArticles.contains(candidate)) {
+                    selectedArticles.add(candidate);
+                }
+            }
+        }
+
+        log.info("대표 기사 선정 완료: 전체 {}개 중 {}개 선정 (중복 제거 적용)",
+                clusterArticles.size(), selectedArticles.size());
+
+        return selectedArticles;
     }
 
     /**
