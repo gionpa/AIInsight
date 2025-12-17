@@ -33,6 +33,7 @@ public class AiSummaryService {
     private final NewsArticleService newsArticleService;
     private final EmbeddingService embeddingService;
     private final ObjectMapper objectMapper;
+    private final com.aiinsight.crawler.SeleniumCrawler seleniumCrawler;
     private final RestTemplate restTemplate = new RestTemplate();
 
     private static final String SUMMARY_PROMPT = """
@@ -483,13 +484,31 @@ public class AiSummaryService {
     }
 
     /**
-     * URL에서 og:title, og:description 메타데이터를 가져옴
-     * @return [0]: og:title, [1]: og:description
+     * URL에서 제목과 본문을 가져옴 (Jsoup → Selenium 폴백)
+     * @return [0]: title, [1]: content
      */
     private String[] fetchMetadataFromUrl(String urlStr) {
         String[] result = new String[2]; // [0]: title, [1]: content
+
+        // 1단계: Jsoup으로 시도
+        result = tryFetchWithJsoup(urlStr);
+
+        // Jsoup이 실패하거나 "Just a moment" 같은 Cloudflare 챌린지 감지 시 Selenium 사용
+        if (isJsoupFailed(result) && seleniumCrawler.isAvailable()) {
+            log.info("Jsoup 크롤링 실패 또는 JavaScript 필요 감지 - Selenium으로 재시도: {}", urlStr);
+            result = tryFetchWithSelenium(urlStr);
+        }
+
+        return result;
+    }
+
+    /**
+     * Jsoup으로 URL 크롤링 시도
+     */
+    private String[] tryFetchWithJsoup(String urlStr) {
+        String[] result = new String[2]; // [0]: title, [1]: content
         try {
-            log.info("URL 메타데이터 및 본문 크롤링 시작: {}", urlStr);
+            log.info("Jsoup 크롤링 시작: {}", urlStr);
 
             // Jsoup을 사용하여 전체 HTML 문서 파싱
             org.jsoup.nodes.Document doc = org.jsoup.Jsoup.connect(urlStr)
@@ -587,15 +606,167 @@ public class AiSummaryService {
             return result;
 
         } catch (org.jsoup.HttpStatusException e) {
-            log.warn("HTTP 오류로 URL 크롤링 실패 ({}): {}", e.getStatusCode(), urlStr);
+            log.warn("Jsoup HTTP 오류 ({}): {}", e.getStatusCode(), urlStr);
             return result;
         } catch (java.net.SocketTimeoutException e) {
-            log.warn("타임아웃으로 URL 크롤링 실패: {}", urlStr);
+            log.warn("Jsoup 타임아웃: {}", urlStr);
             return result;
         } catch (Exception e) {
-            log.error("URL 크롤링 실패: {} - {}", urlStr, e.getMessage());
+            log.error("Jsoup 크롤링 실패: {} - {}", urlStr, e.getMessage());
             return result;
         }
+    }
+
+    /**
+     * Selenium으로 URL 크롤링 시도 (JavaScript 렌더링 지원)
+     */
+    private String[] tryFetchWithSelenium(String urlStr) {
+        String[] result = new String[2]; // [0]: title, [1]: content
+        try {
+            log.info("Selenium 크롤링 시작: {}", urlStr);
+
+            org.openqa.selenium.WebDriver driver = null;
+            try {
+                // Chrome 드라이버 생성
+                org.openqa.selenium.chrome.ChromeOptions options = new org.openqa.selenium.chrome.ChromeOptions();
+                String chromeBinary = System.getenv("CHROME_BIN");
+                if (chromeBinary != null && !chromeBinary.isEmpty()) {
+                    options.setBinary(chromeBinary);
+                }
+                options.addArguments("--headless=new");
+                options.addArguments("--no-sandbox");
+                options.addArguments("--disable-dev-shm-usage");
+                options.addArguments("--disable-gpu");
+                options.addArguments("--window-size=1920,1080");
+                options.addArguments("--disable-blink-features=AutomationControlled");
+                options.setExperimentalOption("excludeSwitches", List.of("enable-automation"));
+                options.setExperimentalOption("useAutomationExtension", false);
+
+                driver = new org.openqa.selenium.chrome.ChromeDriver(options);
+                driver.get(urlStr);
+
+                // JavaScript 렌더링 대기
+                org.openqa.selenium.support.ui.WebDriverWait wait =
+                    new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15));
+                wait.until(webDriver ->
+                    ((org.openqa.selenium.JavascriptExecutor) webDriver)
+                        .executeScript("return document.readyState").equals("complete")
+                );
+
+                // 추가 대기 (동적 콘텐츠 로드)
+                Thread.sleep(3000);
+
+                // HTML 소스 가져오기
+                String pageSource = driver.getPageSource();
+
+                // Jsoup으로 파싱 (이제는 JavaScript가 렌더링된 HTML)
+                org.jsoup.nodes.Document doc = org.jsoup.Jsoup.parse(pageSource);
+
+                // 제목 추출
+                String title = doc.select("meta[property=og:title]").attr("content");
+                if (title.isEmpty()) {
+                    title = doc.select("meta[name=twitter:title]").attr("content");
+                }
+                if (title.isEmpty()) {
+                    title = doc.title();
+                }
+                result[0] = decodeHtmlEntities(title.trim());
+                log.info("Selenium - 제목 추출: {}", result[0]);
+
+                // 본문 추출 (Jsoup과 동일한 4단계 전략)
+                String content = "";
+
+                org.jsoup.nodes.Element articleElem = doc.selectFirst("article");
+                if (articleElem != null) {
+                    content = articleElem.text();
+                    log.info("Selenium - article 태그에서 본문 추출 ({} chars)", content.length());
+                }
+
+                if (content.isEmpty()) {
+                    org.jsoup.nodes.Element mainElem = doc.selectFirst("main");
+                    if (mainElem != null) {
+                        content = mainElem.text();
+                        log.info("Selenium - main 태그에서 본문 추출 ({} chars)", content.length());
+                    }
+                }
+
+                if (content.isEmpty()) {
+                    org.jsoup.select.Elements contentElems = doc.select(
+                        ".article-content, .post-content, .entry-content, " +
+                        ".content, .article-body, .post-body, .story-body, " +
+                        "[class*=article], [class*=content], [class*=body], " +
+                        "[id*=article], [id*=content], [id*=body]"
+                    );
+                    if (!contentElems.isEmpty()) {
+                        content = contentElems.stream()
+                                .map(org.jsoup.nodes.Element::text)
+                                .max((a, b) -> Integer.compare(a.length(), b.length()))
+                                .orElse("");
+                        log.info("Selenium - 클래스/ID 선택자에서 본문 추출 ({} chars)", content.length());
+                    }
+                }
+
+                if (content.isEmpty() || content.length() < 200) {
+                    org.jsoup.select.Elements paragraphs = doc.select("p");
+                    if (!paragraphs.isEmpty()) {
+                        StringBuilder sb = new StringBuilder();
+                        for (org.jsoup.nodes.Element p : paragraphs) {
+                            String pText = p.text().trim();
+                            if (pText.length() > 50) {
+                                sb.append(pText).append(" ");
+                            }
+                        }
+                        String pContent = sb.toString().trim();
+                        if (pContent.length() > content.length()) {
+                            content = pContent;
+                            log.info("Selenium - p 태그 집합에서 본문 추출 ({} chars)", content.length());
+                        }
+                    }
+                }
+
+                // 본문 정제
+                content = content.replaceAll("\\s+", " ").trim();
+                if (content.length() > 5000) {
+                    content = content.substring(0, 5000) + "...";
+                }
+
+                result[1] = content;
+                log.info("Selenium - 최종 본문 추출 완료: {} chars", content.length());
+
+            } finally {
+                if (driver != null) {
+                    try {
+                        driver.quit();
+                    } catch (Exception e) {
+                        log.warn("WebDriver 종료 실패: {}", e.getMessage());
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("Selenium 크롤링 실패: {} - {}", urlStr, e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Jsoup 크롤링 실패 여부 확인
+     */
+    private boolean isJsoupFailed(String[] result) {
+        // 제목이나 본문이 없거나, Cloudflare/JavaScript 챌린지 감지
+        if ((result[0] == null || result[0].isEmpty()) &&
+            (result[1] == null || result[1].isEmpty())) {
+            return true;
+        }
+
+        // Cloudflare 챌린지 감지
+        String title = result[0] != null ? result[0].toLowerCase() : "";
+        String content = result[1] != null ? result[1].toLowerCase() : "";
+
+        return title.contains("just a moment") ||
+               title.contains("attention required") ||
+               content.contains("enable javascript") ||
+               content.contains("cloudflare") && content.length() < 500;
     }
 
 
