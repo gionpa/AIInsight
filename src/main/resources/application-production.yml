@@ -13,13 +13,14 @@ spring:
     username: ${PGUSER:postgres}
     password: ${PGPASSWORD:yOPQIglOJVBrJtUlCMVhVqLQLhEFLwXg}
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 30000
-      idle-timeout: 300000
-      max-lifetime: 900000
-      # 연결 검증
+      maximum-pool-size: 15        # 스케줄러 + API 동시 접근 고려 (Railway와 동일)
+      minimum-idle: 5              # Railway와 동일
+      connection-timeout: 20000    # 20초 (Railway와 동일)
+      idle-timeout: 300000         # 5분 (유휴 연결 유지)
+      max-lifetime: 300000         # 5분 (Railway 환경 최적화: 900000(15분) → 300000(5분))
+      # 연결 검증 (OAuth 로그인 실패 방지)
       connection-test-query: SELECT 1
+      leak-detection-threshold: 60000  # 연결 누수 감지 (60초)
 
   jpa:
     hibernate:
