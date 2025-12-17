@@ -49,7 +49,12 @@ public class AiSummaryService {
             "summary": "3-5문장으로 핵심 내용을 한국어로 요약 (제공된 정보 기반)",
             "relevanceScore": 0.0-1.0 사이의 AI 관련성 점수,
             "category": "LLM|COMPUTER_VISION|NLP|ROBOTICS|ML_OPS|RESEARCH|INDUSTRY|STARTUP|REGULATION|TUTORIAL|PRODUCT|OTHER 중 하나",
-            "importance": "HIGH|MEDIUM|LOW 중 하나"
+            "importance": "HIGH|MEDIUM|LOW 중 하나",
+            "urgencyLevel": "BREAKING|TIMELY|EVERGREEN 중 하나",
+            "impactScope": "GLOBAL|REGIONAL|SECTOR_SPECIFIC 중 하나",
+            "businessImpact": 0.0-1.0 사이의 비즈니스 영향도,
+            "actionabilityScore": 0.0-1.0 사이의 실용성 점수,
+            "mentionedCompanies": ["OpenAI", "Google"] 형태의 배열 (최대 5개)
         }
 
         카테고리 설명:
@@ -70,6 +75,34 @@ public class AiSummaryService {
         - HIGH: 업계 전반에 영향을 미치는 중요한 뉴스 (GPT, Claude, Gemini 등 주요 모델 관련)
         - MEDIUM: 특정 분야에 유의미한 뉴스
         - LOW: 일반적인 소식
+
+        긴급도 기준 (urgencyLevel):
+        - BREAKING: 24시간 내 즉시 알려야 하는 속보 (신제품 출시, 주요 인수합병, 중대 발표)
+        - TIMELY: 1주일 내 유의미한 시의성 있는 뉴스 (컨퍼런스, 업데이트, 이벤트)
+        - EVERGREEN: 시간이 지나도 가치가 유지되는 콘텐츠 (튜토리얼, 연구 논문, 분석 리포트)
+
+        영향 범위 (impactScope):
+        - GLOBAL: 전 세계 AI 업계에 영향 (GPT-5 출시, 주요 규제)
+        - REGIONAL: 특정 지역/국가에 영향 (한국 AI 정책, EU AI Act)
+        - SECTOR_SPECIFIC: 특정 산업/분야에 한정 (의료 AI, 금융 AI)
+
+        비즈니스 영향도 (businessImpact):
+        - 0.9-1.0: 시장 판도를 바꿀 수 있는 영향 (GPT-5, 주요 M&A)
+        - 0.7-0.9: 경쟁력에 큰 영향 (신규 경쟁자, 가격 정책 변화)
+        - 0.5-0.7: 특정 분야에 유의미한 영향
+        - 0.3-0.5: 참고할 만한 변화
+        - 0.0-0.3: 제한적인 영향
+
+        실용성 점수 (actionabilityScore):
+        - 0.8-1.0: 즉시 적용 가능 (API 사용법, 코드 예제, 도구 출시)
+        - 0.6-0.8: 도입 검토 가능 (신규 서비스, 베타 기능)
+        - 0.4-0.6: 중장기 모니터링 필요 (트렌드, 연구 동향)
+        - 0.0-0.4: 정보 참고용 (시장 분석, 의견/논평)
+
+        언급된 회사 (mentionedCompanies):
+        - 기사에서 직접 언급된 주요 기업명 추출 (최대 5개)
+        - 예: ["OpenAI", "Google", "Anthropic", "Microsoft", "Meta"]
+        - 일반 용어(AI, LLM)나 제품명만 있으면 빈 배열
 
         필수 주의사항:
         - 외부 URL 접근 없이 제공된 제목과 내용만 사용
@@ -383,6 +416,19 @@ public class AiSummaryService {
             String categoryStr = json.path("category").asText("OTHER");
             String importanceStr = json.path("importance").asText("MEDIUM");
 
+            // 새로운 지표들 파싱
+            String urgencyLevelStr = json.path("urgencyLevel").asText("TIMELY");
+            String impactScopeStr = json.path("impactScope").asText("SECTOR_SPECIFIC");
+            Double businessImpact = json.path("businessImpact").asDouble(0.5);
+            Double actionabilityScore = json.path("actionabilityScore").asDouble(0.5);
+
+            // mentionedCompanies는 JSON 배열이므로 문자열로 저장
+            String mentionedCompanies = null;
+            JsonNode companiesNode = json.path("mentionedCompanies");
+            if (companiesNode.isArray() && companiesNode.size() > 0) {
+                mentionedCompanies = companiesNode.toString();
+            }
+
             NewsArticle.ArticleCategory category;
             try {
                 category = NewsArticle.ArticleCategory.valueOf(categoryStr);
@@ -397,8 +443,26 @@ public class AiSummaryService {
                 importance = NewsArticle.ArticleImportance.MEDIUM;
             }
 
-            newsArticleService.updateSummary(articleId, titleKo, summary, relevanceScore, category, importance);
-            log.info("기사 요약 완료: {} (관련성: {}, 카테고리: {}, 제목: {})", articleId, relevanceScore, category, titleKo);
+            NewsArticle.UrgencyLevel urgencyLevel;
+            try {
+                urgencyLevel = NewsArticle.UrgencyLevel.valueOf(urgencyLevelStr);
+            } catch (IllegalArgumentException e) {
+                urgencyLevel = NewsArticle.UrgencyLevel.TIMELY;
+            }
+
+            NewsArticle.ImpactScope impactScope;
+            try {
+                impactScope = NewsArticle.ImpactScope.valueOf(impactScopeStr);
+            } catch (IllegalArgumentException e) {
+                impactScope = NewsArticle.ImpactScope.SECTOR_SPECIFIC;
+            }
+
+            newsArticleService.updateSummary(
+                    articleId, titleKo, summary, relevanceScore, category, importance,
+                    urgencyLevel, impactScope, businessImpact, actionabilityScore, mentionedCompanies
+            );
+            log.info("기사 요약 완료: {} (관련성: {}, 카테고리: {}, 긴급도: {}, 비즈니스 영향: {}, 제목: {})",
+                    articleId, relevanceScore, category, urgencyLevel, businessImpact, titleKo);
             return true;
         } catch (Exception e) {
             log.error("요약 응답 파싱 실패: {} - {}", articleId, e.getMessage());

@@ -8,6 +8,7 @@ import com.aiinsight.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,16 +16,19 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
+@Slf4j
 @Tag(name = "리포트", description = "AI 뉴스 분석 리포트 API")
 public class ReportController {
 
     private final ReportService reportService;
     private final DailyReportService dailyReportService;
+    private final com.aiinsight.service.ExecutiveSummaryService executiveSummaryService;
 
     /**
      * Phase 3: 최신 일일 리포트 조회 (레거시 형식)
@@ -202,5 +206,50 @@ public class ReportController {
     @Operation(summary = "특정 카테고리 리포트 조회", description = "특정 카테고리의 HIGH 중요도 기사 리포트를 조회합니다")
     public ResponseEntity<ReportDto.CategoryReport> getReportByCategory(@PathVariable String category) {
         return ResponseEntity.ok(reportService.getReportByCategory(category));
+    }
+
+    /**
+     * Executive Summary 생성 (오늘 날짜)
+     * POST /api/reports/executive-summary/generate
+     */
+    @PostMapping("/executive-summary/generate")
+    @Operation(summary = "Executive Summary 생성", description = "오늘 날짜 기준 최근 7일간의 Executive Summary를 생성합니다 (오늘 기사 가중치)")
+    public ResponseEntity<Map<String, String>> generateExecutiveSummary() {
+        try {
+            LocalDate today = LocalDate.now();
+            String summary = executiveSummaryService.generateExecutiveSummary(today);
+
+            return ResponseEntity.ok(Map.of(
+                    "date", today.toString(),
+                    "summary", summary
+            ));
+        } catch (Exception e) {
+            log.error("Executive Summary 생성 실패", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Executive Summary 생성 (특정 날짜)
+     * POST /api/reports/executive-summary/generate?date=2025-12-17
+     */
+    @PostMapping("/executive-summary/generate-date")
+    @Operation(summary = "특정 날짜 Executive Summary 생성", description = "특정 날짜 기준 최근 7일간의 Executive Summary를 생성합니다")
+    public ResponseEntity<Map<String, String>> generateExecutiveSummaryForDate(
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date
+    ) {
+        try {
+            String summary = executiveSummaryService.generateExecutiveSummary(date);
+
+            return ResponseEntity.ok(Map.of(
+                    "date", date.toString(),
+                    "summary", summary
+            ));
+        } catch (Exception e) {
+            log.error("Executive Summary 생성 실패 (날짜: {})", date, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 }

@@ -11,6 +11,7 @@ import {
   deleteInterestTopic,
   initializeDefaultTopics,
   generateTodayReport,
+  generateExecutiveSummary,
 } from '../api';
 import {
   FileText,
@@ -545,8 +546,10 @@ function TopicManageModal({
 }
 
 export default function Report() {
-  const [viewMode, setViewMode] = useState<'daily' | 'category' | 'topics'>('daily');
+  const [viewMode, setViewMode] = useState<'daily' | 'category' | 'topics' | 'executive'>('daily');
   const [showTopicManager, setShowTopicManager] = useState(false);
+  const [executiveSummary, setExecutiveSummary] = useState<{ date: string; summary: string } | null>(null);
+  const [isGeneratingExecutive, setIsGeneratingExecutive] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: dailyReport, isLoading: isDailyLoading, refetch: refetchDailyReport } = useQuery({
@@ -594,6 +597,19 @@ export default function Report() {
     generateReportMutation.mutate();
   };
 
+  const handleGenerateExecutiveSummary = async () => {
+    setIsGeneratingExecutive(true);
+    try {
+      const result = await generateExecutiveSummary();
+      setExecutiveSummary(result);
+    } catch (error) {
+      console.error('Executive Summary 생성 실패:', error);
+      alert('Executive Summary 생성에 실패했습니다.');
+    } finally {
+      setIsGeneratingExecutive(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -633,6 +649,17 @@ export default function Report() {
           >
             <Star className="w-3 h-3 md:w-4 md:h-4 inline mr-0.5 md:mr-1" />
             관심주제
+          </button>
+          <button
+            onClick={() => setViewMode('executive')}
+            className={`px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+              viewMode === 'executive'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <BarChart3 className="w-3 h-3 md:w-4 md:h-4 inline mr-0.5 md:mr-1" />
+            Executive
           </button>
         </div>
       </div>
@@ -902,6 +929,76 @@ export default function Report() {
             topicsReport.topics.map((topic) => (
               <TopicSection key={topic.topicId} topic={topic} />
             ))
+          )}
+        </div>
+      ) : null}
+
+      {/* Executive Summary View */}
+      {viewMode === 'executive' ? (
+        <div className="space-y-6">
+          {/* Header with Generate Button */}
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <BarChart3 className="w-6 h-6 text-purple-600" />
+                  Executive Summary
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  최근 7일간의 주요 AI 뉴스를 경영진 관점으로 요약합니다 (오늘 기사 가중치 적용)
+                </p>
+              </div>
+              <button
+                onClick={handleGenerateExecutiveSummary}
+                disabled={isGeneratingExecutive}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isGeneratingExecutive ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    생성 중...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    오늘자 리포트 생성
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Executive Summary Content */}
+          {executiveSummary ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="mb-4 pb-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    리포트 날짜: {new Date(executiveSummary.date).toLocaleDateString('ko-KR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    분석 기간: 최근 7일
+                  </span>
+                </div>
+              </div>
+              <div className="prose prose-sm md:prose max-w-none">
+                <ReactMarkdown>{executiveSummary.summary}</ReactMarkdown>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+              <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 mb-4">
+                Executive Summary가 생성되지 않았습니다.
+              </p>
+              <p className="text-sm text-gray-400 mb-6">
+                "오늘자 리포트 생성" 버튼을 클릭하여 최신 Executive Summary를 생성하세요.
+              </p>
+            </div>
           )}
         </div>
       ) : null}

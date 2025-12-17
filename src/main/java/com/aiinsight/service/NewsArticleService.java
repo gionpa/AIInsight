@@ -109,7 +109,9 @@ public class NewsArticleService {
 
     @Transactional
     public void updateSummary(Long id, String titleKo, String summary, Double relevanceScore,
-                              NewsArticle.ArticleCategory category, NewsArticle.ArticleImportance importance) {
+                              NewsArticle.ArticleCategory category, NewsArticle.ArticleImportance importance,
+                              NewsArticle.UrgencyLevel urgencyLevel, NewsArticle.ImpactScope impactScope,
+                              Double businessImpact, Double actionabilityScore, String mentionedCompanies) {
         NewsArticle article = newsArticleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("기사를 찾을 수 없습니다: " + id));
 
@@ -120,11 +122,17 @@ public class NewsArticleService {
         article.setRelevanceScore(relevanceScore);
         article.setCategory(category);
         article.setImportance(importance);
+        article.setUrgencyLevel(urgencyLevel);
+        article.setImpactScope(impactScope);
+        article.setBusinessImpact(businessImpact);
+        article.setActionabilityScore(actionabilityScore);
+        article.setMentionedCompanies(mentionedCompanies);
         article.setAnalysisStatus(NewsArticle.AnalysisStatus.COMPLETED);
         article.setIsSummarized(true);
 
         newsArticleRepository.save(article);
-        log.info("기사 요약 완료: {} -> {} (점수: {})", article.getTitle(), titleKo, relevanceScore);
+        log.info("기사 요약 완료: {} -> {} (점수: {}, 긴급도: {}, 영향: {})",
+                article.getTitle(), titleKo, relevanceScore, urgencyLevel, businessImpact);
     }
 
     @Transactional

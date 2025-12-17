@@ -70,6 +70,28 @@ public class NewsArticle {
     @Enumerated(EnumType.STRING)
     private ArticleImportance importance;
 
+    // 긴급도 (시간성)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "urgency_level", length = 20)
+    private UrgencyLevel urgencyLevel;
+
+    // 영향 범위
+    @Enumerated(EnumType.STRING)
+    @Column(name = "impact_scope", length = 30)
+    private ImpactScope impactScope;
+
+    // 비즈니스 영향도 (0.0 ~ 1.0)
+    @Column(name = "business_impact")
+    private Double businessImpact;
+
+    // 실용성 점수 (0.0 ~ 1.0)
+    @Column(name = "actionability_score")
+    private Double actionabilityScore;
+
+    // 언급된 회사들 (JSON 배열 형태)
+    @Column(name = "mentioned_companies", columnDefinition = "TEXT")
+    private String mentionedCompanies;
+
     // 중복 방지용 해시 (URL + 제목 기반)
     @Column(name = "content_hash", nullable = false, unique = true, length = 64)
     private String contentHash;
@@ -122,5 +144,17 @@ public class NewsArticle {
         PROCESSING,     // 분석 중
         COMPLETED,      // 완료
         FAILED          // 실패
+    }
+
+    public enum UrgencyLevel {
+        BREAKING,       // 속보 (24시간 내)
+        TIMELY,         // 시의성 (1주일 내)
+        EVERGREEN       // 상시 유효
+    }
+
+    public enum ImpactScope {
+        GLOBAL,             // 전 세계 영향
+        REGIONAL,           // 지역/국가 영향
+        SECTOR_SPECIFIC     // 특정 산업 한정
     }
 }
