@@ -174,8 +174,8 @@ public class AiSummaryService {
             return;
         }
 
-        // 제목이 없거나 일반적인 제목인 경우 URL에서 정보 추출 시도
-        boolean needMetadataFetch = (title == null || title.isEmpty() || isGenericTitle(title));
+        // 제목이 없거나 일반적인 제목인 경우, 또는 강제 재분석 모드인 경우 URL에서 정보 추출 시도
+        boolean needMetadataFetch = forceReanalyze || (title == null || title.isEmpty() || isGenericTitle(title));
         String[] metadata = null;
 
         if (needMetadataFetch && url != null && !url.isEmpty()) {
@@ -186,11 +186,14 @@ public class AiSummaryService {
                 title = metadata[0];
                 log.info("URL 메타데이터에서 제목 추출 및 업데이트: {} -> {}", url, title);
             }
-            if (metadata[1] != null && !metadata[1].isEmpty() && (content == null || content.isEmpty())) {
-                // 원본 기사의 content도 업데이트 (없는 경우에만)
-                article.setContent(metadata[1]);
-                content = metadata[1];
-                log.info("URL 메타데이터에서 설명 추출 및 업데이트: {}", url);
+            if (metadata[1] != null && !metadata[1].isEmpty()) {
+                // 강제 재분석 모드이거나 기존 content가 없는 경우 업데이트
+                if (forceReanalyze || content == null || content.isEmpty()) {
+                    article.setContent(metadata[1]);
+                    content = metadata[1];
+                    log.info("URL 메타데이터에서 본문 추출 및 업데이트 (강제={}, 기존 content 길이={})",
+                            forceReanalyze, content == null ? 0 : content.length());
+                }
             }
         }
 
