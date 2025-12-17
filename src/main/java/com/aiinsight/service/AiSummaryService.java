@@ -484,93 +484,117 @@ public class AiSummaryService {
      * @return [0]: og:title, [1]: og:description
      */
     private String[] fetchMetadataFromUrl(String urlStr) {
-        String[] result = new String[2];
+        String[] result = new String[2]; // [0]: title, [1]: content
         try {
-            URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; AIInsight/1.0)");
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
+            log.info("URL 메타데이터 및 본문 크롤링 시작: {}", urlStr);
 
-            int responseCode = conn.getResponseCode();
-            if (responseCode != 200) {
-                log.warn("URL 메타데이터 가져오기 실패 (HTTP {}): {}", responseCode, urlStr);
-                return result;
+            // Jsoup을 사용하여 전체 HTML 문서 파싱
+            org.jsoup.nodes.Document doc = org.jsoup.Jsoup.connect(urlStr)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .timeout(10000)
+                    .followRedirects(true)
+                    .get();
+
+            // 1. 제목 추출 (우선순위: og:title > twitter:title > title tag)
+            String title = doc.select("meta[property=og:title]").attr("content");
+            if (title.isEmpty()) {
+                title = doc.select("meta[name=twitter:title]").attr("content");
+            }
+            if (title.isEmpty()) {
+                title = doc.title();
+            }
+            result[0] = decodeHtmlEntities(title.trim());
+            log.info("제목 추출 성공: {}", result[0]);
+
+            // 2. 본문 추출 시도 (여러 선택자로 시도)
+            String content = "";
+
+            // 방법 1: article 태그 내용
+            org.jsoup.nodes.Element articleElem = doc.selectFirst("article");
+            if (articleElem != null) {
+                content = articleElem.text();
+                log.info("article 태그에서 본문 추출 ({} chars)", content.length());
             }
 
-            StringBuilder html = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                int lineCount = 0;
-                while ((line = reader.readLine()) != null && lineCount < 100) {
-                    html.append(line);
-                    lineCount++;
-                    // head 태그 끝나면 더 이상 읽지 않음
-                    if (line.contains("</head>")) break;
+            // 방법 2: main 태그 내용
+            if (content.isEmpty()) {
+                org.jsoup.nodes.Element mainElem = doc.selectFirst("main");
+                if (mainElem != null) {
+                    content = mainElem.text();
+                    log.info("main 태그에서 본문 추출 ({} chars)", content.length());
                 }
             }
 
-            String htmlStr = html.toString();
-
-            // og:title 추출 (property와 content 속성 순서가 바뀔 수 있음)
-            // 패턴 1: property="og:title" content="..."
-            Pattern ogTitlePattern1 = Pattern.compile("<meta\\s+property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-            // 패턴 2: content="..." property="og:title"
-            Pattern ogTitlePattern2 = Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+property=[\"']og:title[\"']", Pattern.CASE_INSENSITIVE);
-
-            Matcher ogTitleMatcher1 = ogTitlePattern1.matcher(htmlStr);
-            Matcher ogTitleMatcher2 = ogTitlePattern2.matcher(htmlStr);
-            if (ogTitleMatcher1.find()) {
-                result[0] = decodeHtmlEntities(ogTitleMatcher1.group(1));
-            } else if (ogTitleMatcher2.find()) {
-                result[0] = decodeHtmlEntities(ogTitleMatcher2.group(1));
-            }
-
-            // og:description 추출 (property와 content 속성 순서가 바뀔 수 있음)
-            // 패턴 1: property="og:description" content="..."
-            Pattern ogDescPattern1 = Pattern.compile("<meta\\s+property=[\"']og:description[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-            // 패턴 2: content="..." property="og:description"
-            Pattern ogDescPattern2 = Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+property=[\"']og:description[\"']", Pattern.CASE_INSENSITIVE);
-
-            Matcher ogDescMatcher1 = ogDescPattern1.matcher(htmlStr);
-            Matcher ogDescMatcher2 = ogDescPattern2.matcher(htmlStr);
-            if (ogDescMatcher1.find()) {
-                result[1] = decodeHtmlEntities(ogDescMatcher1.group(1));
-            } else if (ogDescMatcher2.find()) {
-                result[1] = decodeHtmlEntities(ogDescMatcher2.group(1));
-            }
-
-            // name="description" 메타 태그도 시도 (og:description이 없는 경우)
-            if (result[1] == null || result[1].isEmpty()) {
-                Pattern metaDescPattern1 = Pattern.compile("<meta\\s+name=[\"']description[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-                Pattern metaDescPattern2 = Pattern.compile("<meta\\s+content=[\"']([^\"']+)[\"']\\s+name=[\"']description[\"']", Pattern.CASE_INSENSITIVE);
-                Matcher metaDescMatcher1 = metaDescPattern1.matcher(htmlStr);
-                Matcher metaDescMatcher2 = metaDescPattern2.matcher(htmlStr);
-                if (metaDescMatcher1.find()) {
-                    result[1] = decodeHtmlEntities(metaDescMatcher1.group(1));
-                } else if (metaDescMatcher2.find()) {
-                    result[1] = decodeHtmlEntities(metaDescMatcher2.group(1));
+            // 방법 3: 특정 클래스명으로 시도 (일반적인 기사 본문 클래스)
+            if (content.isEmpty()) {
+                org.jsoup.select.Elements contentElems = doc.select(
+                    ".article-content, .post-content, .entry-content, " +
+                    ".content, .article-body, .post-body, .story-body, " +
+                    "[class*=article], [class*=content], [class*=body], " +
+                    "[id*=article], [id*=content], [id*=body]"
+                );
+                if (!contentElems.isEmpty()) {
+                    // 가장 긴 텍스트를 가진 요소 선택
+                    content = contentElems.stream()
+                            .map(org.jsoup.nodes.Element::text)
+                            .max((a, b) -> Integer.compare(a.length(), b.length()))
+                            .orElse("");
+                    log.info("클래스/ID 선택자에서 본문 추출 ({} chars)", content.length());
                 }
             }
 
-            // og:title이 없으면 일반 title 태그 시도
-            if (result[0] == null || result[0].isEmpty()) {
-                Pattern titlePattern = Pattern.compile("<title>([^<]+)</title>", Pattern.CASE_INSENSITIVE);
-                Matcher titleMatcher = titlePattern.matcher(htmlStr);
-                if (titleMatcher.find()) {
-                    result[0] = decodeHtmlEntities(titleMatcher.group(1));
+            // 방법 4: p 태그들을 합쳐서 본문 추출 (최후의 수단)
+            if (content.isEmpty() || content.length() < 200) {
+                org.jsoup.select.Elements paragraphs = doc.select("p");
+                if (!paragraphs.isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    for (org.jsoup.nodes.Element p : paragraphs) {
+                        String pText = p.text().trim();
+                        if (pText.length() > 50) { // 최소 50자 이상의 문단만 포함
+                            sb.append(pText).append(" ");
+                        }
+                    }
+                    String pContent = sb.toString().trim();
+                    if (pContent.length() > content.length()) {
+                        content = pContent;
+                        log.info("p 태그 집합에서 본문 추출 ({} chars)", content.length());
+                    }
                 }
             }
 
-            log.debug("URL 메타데이터 추출 완료: {} -> {}", urlStr, result[0]);
+            // 3. OG description을 fallback으로 사용 (본문이 너무 짧은 경우)
+            if (content.length() < 100) {
+                String ogDesc = doc.select("meta[property=og:description]").attr("content");
+                if (!ogDesc.isEmpty() && ogDesc.length() > content.length()) {
+                    content = ogDesc;
+                    log.info("og:description을 본문으로 사용 ({} chars)", content.length());
+                }
+            }
 
+            // 4. 본문 정제 (불필요한 공백 제거, 길이 제한)
+            content = content.replaceAll("\\s+", " ").trim();
+            if (content.length() > 5000) {
+                content = content.substring(0, 5000) + "...";
+                log.info("본문 길이 제한 적용: 5000 chars");
+            }
+
+            result[1] = content;
+            log.info("최종 본문 추출 완료: {} chars", content.length());
+
+            return result;
+
+        } catch (org.jsoup.HttpStatusException e) {
+            log.warn("HTTP 오류로 URL 크롤링 실패 ({}): {}", e.getStatusCode(), urlStr);
+            return result;
+        } catch (java.net.SocketTimeoutException e) {
+            log.warn("타임아웃으로 URL 크롤링 실패: {}", urlStr);
+            return result;
         } catch (Exception e) {
-            log.warn("URL 메타데이터 가져오기 실패: {} - {}", urlStr, e.getMessage());
+            log.error("URL 크롤링 실패: {} - {}", urlStr, e.getMessage());
+            return result;
         }
-        return result;
     }
+
 
     /**
      * HTML 엔티티 디코딩
