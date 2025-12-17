@@ -627,34 +627,67 @@ public class AiSummaryService {
 
             org.openqa.selenium.WebDriver driver = null;
             try {
-                // Chrome 드라이버 생성
+                // Chrome 드라이버 생성 (Cloudflare 우회 강화)
                 org.openqa.selenium.chrome.ChromeOptions options = new org.openqa.selenium.chrome.ChromeOptions();
                 String chromeBinary = System.getenv("CHROME_BIN");
                 if (chromeBinary != null && !chromeBinary.isEmpty()) {
                     options.setBinary(chromeBinary);
                 }
+
+                // Headless 모드
                 options.addArguments("--headless=new");
                 options.addArguments("--no-sandbox");
                 options.addArguments("--disable-dev-shm-usage");
                 options.addArguments("--disable-gpu");
                 options.addArguments("--window-size=1920,1080");
+
+                // Cloudflare 우회를 위한 강화된 봇 감지 방지
                 options.addArguments("--disable-blink-features=AutomationControlled");
                 options.setExperimentalOption("excludeSwitches", List.of("enable-automation"));
                 options.setExperimentalOption("useAutomationExtension", false);
 
+                // User-Agent 설정 (최신 Chrome)
+                options.addArguments("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+
+                // 추가 Cloudflare 우회 옵션
+                options.addArguments("--disable-web-security");
+                options.addArguments("--disable-features=IsolateOrigins,site-per-process");
+
+                // 실제 브라우저처럼 보이기 위한 설정
+                options.addArguments("--enable-features=NetworkService,NetworkServiceInProcess");
+                options.addArguments("--disable-background-networking");
+                options.addArguments("--disable-background-timer-throttling");
+                options.addArguments("--disable-backgrounding-occluded-windows");
+                options.addArguments("--disable-renderer-backgrounding");
+                options.addArguments("--disable-hang-monitor");
+                options.addArguments("--disable-prompt-on-repost");
+                options.addArguments("--disable-sync");
+
+                // navigator.webdriver 제거를 위한 추가 설정
+                java.util.Map<String, Object> prefs = new java.util.HashMap<>();
+                prefs.put("credentials_enable_service", false);
+                prefs.put("profile.password_manager_enabled", false);
+                options.setExperimentalOption("prefs", prefs);
+
                 driver = new org.openqa.selenium.chrome.ChromeDriver(options);
+
+                // navigator.webdriver 속성 제거 (Cloudflare 봇 감지 우회)
+                org.openqa.selenium.JavascriptExecutor js = (org.openqa.selenium.JavascriptExecutor) driver;
+                js.executeScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
+
                 driver.get(urlStr);
 
                 // JavaScript 렌더링 대기
                 org.openqa.selenium.support.ui.WebDriverWait wait =
-                    new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(15));
+                    new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(20));
                 wait.until(webDriver ->
                     ((org.openqa.selenium.JavascriptExecutor) webDriver)
                         .executeScript("return document.readyState").equals("complete")
                 );
 
-                // 추가 대기 (동적 콘텐츠 로드)
-                Thread.sleep(3000);
+                // Cloudflare 챌린지 통과 대기 (최대 10초)
+                log.info("Cloudflare 챌린지 통과 대기 중...");
+                Thread.sleep(10000);
 
                 // HTML 소스 가져오기
                 String pageSource = driver.getPageSource();
