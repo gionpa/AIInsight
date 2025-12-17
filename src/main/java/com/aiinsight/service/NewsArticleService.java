@@ -3,6 +3,7 @@ package com.aiinsight.service;
 import com.aiinsight.domain.article.NewsArticle;
 import com.aiinsight.domain.article.NewsArticleRepository;
 import com.aiinsight.domain.crawl.CrawlTarget;
+import com.aiinsight.domain.embedding.ArticleEmbeddingRepository;
 import com.aiinsight.dto.NewsArticleDto;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 public class NewsArticleService {
 
     private final NewsArticleRepository newsArticleRepository;
+    private final ArticleEmbeddingRepository articleEmbeddingRepository;
 
     public Page<NewsArticleDto.Response> findAll(Pageable pageable) {
         return newsArticleRepository.findAllByOrderByCrawledAtDesc(pageable)
@@ -193,6 +195,13 @@ public class NewsArticleService {
     @Transactional
     public void delete(Long id) {
         if (newsArticleRepository.existsById(id)) {
+            // 1. 먼저 관련 임베딩 삭제 (Foreign Key 제약조건 때문)
+            articleEmbeddingRepository.findByArticleId(id).ifPresent(embedding -> {
+                articleEmbeddingRepository.delete(embedding);
+                log.info("기사 임베딩 삭제: Article ID {}", id);
+            });
+
+            // 2. 기사 삭제
             newsArticleRepository.deleteById(id);
             log.info("기사 삭제: ID {}", id);
         }
@@ -203,6 +212,13 @@ public class NewsArticleService {
         int deleted = 0;
         for (Long id : ids) {
             if (newsArticleRepository.existsById(id)) {
+                // 1. 먼저 관련 임베딩 삭제 (Foreign Key 제약조건 때문)
+                articleEmbeddingRepository.findByArticleId(id).ifPresent(embedding -> {
+                    articleEmbeddingRepository.delete(embedding);
+                    log.debug("기사 임베딩 삭제: Article ID {}", id);
+                });
+
+                // 2. 기사 삭제
                 newsArticleRepository.deleteById(id);
                 deleted++;
             }
