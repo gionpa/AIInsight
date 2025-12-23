@@ -617,23 +617,24 @@ public class DailyReportService {
         for (int i = 0; i < Math.min(clusters.size(), 5); i++) {
             TopicCluster cluster = clusters.get(i);
 
+            // Phase 2: 대표 기사 선정 (Centroid 기반, 상위 3개)
+            List<NewsArticle> representativeArticles = selectRepresentativeArticles(cluster, 3);
+
+            // Phase 2: Claude AI를 활용한 토픽 제목 + 요약 생성 (제목도 업데이트됨)
+            String aiSummary = generateTopicSummaryWithAI(
+                    cluster,
+                    representativeArticles
+            );
+
             // Phase 3: 트렌드 타입 및 뱃지 결정
             String trendType = getTopicTrendType(cluster, trendAnalysis);
             String trendBadge = getTrendBadge(trendType);
 
-            // 토픽 제목 with 트렌드 뱃지
+            // 토픽 제목 with 트렌드 뱃지 (AI가 업데이트한 제목 사용)
             insights.append(String.format("### %d. %s%s\n\n",
                     i + 1, cluster.getTopicName(), trendBadge));
 
-            // Phase 2: 대표 기사 선정 (Centroid 기반, 상위 3개)
-            List<NewsArticle> representativeArticles = selectRepresentativeArticles(cluster, 3);
-
-            // Phase 2: Claude AI를 활용한 토픽 요약 생성
-            String aiSummary = generateTopicSummaryWithAI(
-                    cluster.getTopicName(),
-                    representativeArticles,
-                    cluster.getKeywords()
-            );
+            // AI 생성 요약
             insights.append(aiSummary).append("\n\n");
 
             // 주요 기사 링크 (대표 기사 기준)
@@ -793,29 +794,24 @@ public class DailyReportService {
      * @return 상위 5개 키워드 리스트
      */
     private List<String> extractClusterKeywords(List<NewsArticle> clusterArticles, List<NewsArticle> allArticles) {
-        // 확장된 불용어 목록 (60+ words)
-        Set<String> stopWords = Set.of(
-                "ai", "인공지능", "개발", "발표", "출시", "공개", "새로운", "최신", "기술", "시스템",
-                "서비스", "플랫폼", "솔루션", "기업", "회사", "국내", "글로벌", "연구", "분석",
-                "이", "가", "을", "를", "의", "에", "와", "과", "도", "로", "으로", "는", "은",
-                "위한", "통해", "대한", "있는", "있다", "한다", "된다", "한", "등", "및", "또는",
-                "것으로", "이는", "있습니다", "됩니다", "하는", "있으며", "모델", "것이", "하며",
-                "수", "등을", "것", "이다", "위해", "따른", "관련", "중", "더", "그", "매우",
-                "년", "월", "일", "시간", "이번", "오늘", "어제", "내일", "최근", "현재"
-        );
-
         // Step 1: 클러스터 내 Term Frequency (TF) 계산
         Map<String, Integer> clusterTF = new HashMap<>();
         for (NewsArticle article : clusterArticles) {
             String text = (article.getTitleKo() != null ? article.getTitleKo() : article.getTitle()) + " " +
                     (article.getSummary() != null ? article.getSummary() : "");
 
-            String[] words = text.split("[\\s,\\.\\-\\(\\)\\[\\]\"']+");
+            // 구두점으로 단어 분리 (개선된 패턴)
+            String[] words = text.split("[\\s,.'\"'\"()\\[\\]{}:;!?·\\-]+");
             for (String word : words) {
-                String clean = word.trim().toLowerCase();
-                if (clean.length() >= 2 && clean.length() <= 20 &&
-                        !stopWords.contains(clean) &&
-                        !clean.matches(".*[0-9]+.*")) {
+                // 구두점 제거
+                String clean = word.replaceAll("[,.'\"'\"()\\[\\]{}:;!?·\\-]+", "").trim();
+
+                // 필터링: 3자 이상, 20자 이하, 불용어 제외, 숫자 제외, 조사 결합형 제외
+                if (clean.length() >= 3 && clean.length() <= 20 &&
+                        !isStopWord(clean) &&
+                        !clean.matches(".*[0-9]+.*") &&
+                        !isParticleEnding(clean)) {
+                    // 원본 대소문자 유지
                     clusterTF.put(clean, clusterTF.getOrDefault(clean, 0) + 1);
                 }
             }
@@ -889,11 +885,11 @@ public class DailyReportService {
             return clusterArticles;
         }
 
-        // 각 기사의 평균 유사도 계산 (EmbeddingService 활용)
-        Map<NewsArticle, Double> avgSimilarities = new HashMap<>();
+        // 각 기사의 종합 품질 점수 계산 (Quality Score)
+        Map<NewsArticle, Double> qualityScores = new HashMap<>();
 
         for (NewsArticle article : clusterArticles) {
-            // 해당 기사와 클러스터 내 다른 모든 기사와의 유사도 합계 계산
+            // 1. 평균 유사도 계산 (클러스터 대표성, 40%)
             List<Map<String, Object>> similarArticles = embeddingService.findSimilarArticles(
                     article.getId(),
                     clusterArticles.size()
@@ -902,7 +898,6 @@ public class DailyReportService {
             double totalSimilarity = 0.0;
             int comparisonCount = 0;
 
-            // 클러스터 내 기사들과의 유사도만 합산
             Set<Long> clusterArticleIds = clusterArticles.stream()
                     .map(NewsArticle::getId)
                     .collect(Collectors.toSet());
@@ -911,21 +906,42 @@ public class DailyReportService {
                 Long similarId = (Long) similar.get("articleId");
                 Double similarity = (Double) similar.get("similarity");
 
-                // 클러스터 내 기사인 경우만 카운트
                 if (clusterArticleIds.contains(similarId)) {
                     totalSimilarity += similarity;
                     comparisonCount++;
                 }
             }
 
-            if (comparisonCount > 0) {
-                double avgSimilarity = totalSimilarity / comparisonCount;
-                avgSimilarities.put(article, avgSimilarity);
-            }
+            double avgSimilarity = comparisonCount > 0 ? totalSimilarity / comparisonCount : 0.0;
+
+            // 2. AI 관련성 점수 (25%)
+            double relevanceScore = article.getRelevanceScore() != null ? article.getRelevanceScore() : 0.5;
+
+            // 3. 비즈니스 영향도 (20%)
+            double businessImpact = article.getBusinessImpact() != null ? article.getBusinessImpact() : 0.5;
+
+            // 4. 긴급도 점수 (10%)
+            double urgencyScore = getUrgencyScore(article.getUrgencyLevel());
+
+            // 5. 제목 품질 점수 (5%)
+            double titleQuality = calculateTitleQuality(article);
+
+            // 종합 품질 점수 계산
+            double qualityScore = (avgSimilarity * 0.40) +
+                                 (relevanceScore * 0.25) +
+                                 (businessImpact * 0.20) +
+                                 (urgencyScore * 0.10) +
+                                 (titleQuality * 0.05);
+
+            qualityScores.put(article, qualityScore);
+
+            log.debug("기사 품질 점수 - [{}] 유사도:{:.3f} 관련성:{:.3f} 임팩트:{:.3f} 긴급:{:.3f} 제목:{:.3f} => 총점:{:.3f}",
+                    article.getTitleKo() != null ? article.getTitleKo().substring(0, Math.min(30, article.getTitleKo().length())) : "N/A",
+                    avgSimilarity, relevanceScore, businessImpact, urgencyScore, titleQuality, qualityScore);
         }
 
-        // 평균 유사도 기준 상위 후보 선정 (topN * 3개로 여유있게)
-        List<NewsArticle> candidates = avgSimilarities.entrySet().stream()
+        // 종합 품질 점수 기준 상위 후보 선정 (topN * 3개로 여유있게)
+        List<NewsArticle> candidates = qualityScores.entrySet().stream()
                 .sorted(Map.Entry.<NewsArticle, Double>comparingByValue().reversed())
                 .limit(topN * 3)
                 .map(Map.Entry::getKey)
@@ -997,16 +1013,17 @@ public class DailyReportService {
     /**
      * Phase 2: Claude AI를 활용한 토픽 요약 생성
      * 대표 기사들의 내용을 분석하여 2-3문장의 요약 생성
-     * @param topicName 토픽 제목
+     * @param cluster 클러스터 객체 (제목 업데이트용)
      * @param representativeArticles 대표 기사 리스트
-     * @param keywords 토픽 키워드
      * @return AI 생성 요약문 (2-3 sentences)
      */
     private String generateTopicSummaryWithAI(
-            String topicName,
-            List<NewsArticle> representativeArticles,
-            List<String> keywords
+            TopicCluster cluster,
+            List<NewsArticle> representativeArticles
     ) {
+        String topicName = cluster.getTopicName();
+        List<String> keywords = cluster.getKeywords();
+
         try {
             // 대표 기사 정보 구성
             StringBuilder articlesInfo = new StringBuilder();
@@ -1018,28 +1035,58 @@ public class DailyReportService {
                 articlesInfo.append(String.format("%d. %s\n%s\n\n", i + 1, title, summary));
             }
 
-            // Claude AI 프롬프트 구성
+            // Claude AI 프롬프트 구성 (토픽 제목 + 설명 동시 생성)
             String prompt = String.format(
-                    "다음은 '%s' 토픽의 대표 기사들입니다. 핵심 키워드는 [%s]입니다.\n\n" +
+                    "다음은 AI 뉴스 토픽의 대표 기사들입니다. 핵심 키워드는 [%s]입니다.\n\n" +
                     "%s\n" +
-                    "이 토픽의 핵심 내용을 2-3문장으로 요약해주세요. 요약은 다음 조건을 만족해야 합니다:\n" +
-                    "1. 한국어로 작성\n" +
-                    "2. 2-3문장 이내\n" +
-                    "3. 핵심 키워드 포함\n" +
-                    "4. 기술적 세부사항 및 구체적 내용 포함\n" +
-                    "5. 마크다운 형식 불필요, 일반 텍스트로 작성\n\n" +
-                    "요약:",
-                    topicName,
+                    "위 기사들의 공통 주제를 분석하여 다음을 생성해주세요:\n\n" +
+                    "1. **토픽 제목** (한 줄):\n" +
+                    "   - 5-8단어 이내\n" +
+                    "   - 구체적이고 의미있는 내용\n" +
+                    "   - 키워드 나열이 아닌 완전한 문장 또는 구\n" +
+                    "   - 예시: 'OpenAI GPT-5 출시 및 기업용 기능 강화', 'Meta의 멀티모달 AI 모델 SAM 시리즈 공개'\n\n" +
+                    "2. **토픽 설명** (2-3문장):\n" +
+                    "   - 구체적인 기술/제품명 포함\n" +
+                    "   - 주요 발전 내용 명시\n" +
+                    "   - 산업 의미나 영향 간단히 언급\n\n" +
+                    "출력 형식:\n" +
+                    "TITLE: [토픽 제목]\n" +
+                    "DESCRIPTION: [토픽 설명]",
                     String.join(", ", keywords),
                     articlesInfo.toString()
             );
 
             // Claude CLI 호출
-            String aiSummary = callClaudeCLIForSummary(prompt);
+            String aiResponse = callClaudeCLIForSummary(prompt);
 
-            if (aiSummary != null && !aiSummary.trim().isEmpty()) {
-                log.info("AI 토픽 요약 생성 성공: {}", topicName);
-                return aiSummary.trim();
+            if (aiResponse != null && !aiResponse.trim().isEmpty()) {
+                // 응답 파싱: TITLE: ... DESCRIPTION: ...
+                String[] lines = aiResponse.split("\n");
+                String newTitle = null;
+                String description = null;
+
+                for (String line : lines) {
+                    if (line.startsWith("TITLE:")) {
+                        newTitle = line.substring(6).trim();
+                    } else if (line.startsWith("DESCRIPTION:")) {
+                        description = line.substring(12).trim();
+                    }
+                }
+
+                // 제목이 성공적으로 생성되었으면 업데이트
+                if (newTitle != null && !newTitle.isEmpty() && newTitle.length() > 5) {
+                    cluster.setTopicName(newTitle);
+                    log.info("AI 토픽 제목 생성 성공: {} -> {}", topicName, newTitle);
+                }
+
+                // 설명 반환
+                if (description != null && !description.isEmpty()) {
+                    log.info("AI 토픽 설명 생성 성공");
+                    return description;
+                } else {
+                    log.warn("AI 설명 파싱 실패, 전체 응답 사용");
+                    return aiResponse.trim();
+                }
             } else {
                 log.warn("AI 요약 생성 실패, 폴백 사용: {}", topicName);
                 return generateFallbackTopicDescription(representativeArticles, keywords);
@@ -1065,10 +1112,10 @@ public class DailyReportService {
 
             Process process = processBuilder.start();
 
-            // 15초 타임아웃 설정 (AI 응답 시간 고려)
-            if (!process.waitFor(15, TimeUnit.SECONDS)) {
+            // 120초 타임아웃 설정 (AI 응답 시간 고려)
+            if (!process.waitFor(120, TimeUnit.SECONDS)) {
                 process.destroy();
-                log.warn("Claude CLI 타임아웃 (15초)");
+                log.warn("Claude CLI 타임아웃 (120초)");
                 throw new RuntimeException("Claude CLI timeout");
             }
 
@@ -1294,9 +1341,14 @@ public class DailyReportService {
         for (NewsArticle article : articles) {
             String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
             if (title != null) {
-                String[] words = title.split("\\s+");
+                // 구두점으로 분리
+                String[] words = title.split("[\\s,.'\"'\"()\\[\\]{}:;!?·]+");
                 for (String word : words) {
-                    if (word.length() > 2 && !isStopWord(word)) {
+                    // 구두점 제거 (작은따옴표, 큰따옴표 모두)
+                    word = word.replaceAll("[,.'\"'\"()\\[\\]{}:;!?·]+", "").trim();
+
+                    // 필터링: 3자 이상, 불용어 제외, 조사 결합형 제외
+                    if (word.length() >= 3 && !isStopWord(word) && !isParticleEnding(word)) {
                         keywordFrequency.put(word, keywordFrequency.getOrDefault(word, 0) + 1);
                     }
                 }
@@ -1323,12 +1375,107 @@ public class DailyReportService {
     }
 
     /**
-     * 불용어 체크 (간단 버전)
+     * 불용어 체크 (보강된 버전)
      */
     private boolean isStopWord(String word) {
-        Set<String> stopWords = Set.of("the", "is", "at", "which", "on", "a", "an", "and", "or", "but",
-                "이", "그", "저", "것", "수", "등", "및", "를", "을", "가", "에", "의", "와");
+        Set<String> stopWords = Set.of(
+                // 영문 기본
+                "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+                "of", "is", "are", "was", "were", "be", "been", "being", "have", "has",
+                "had", "do", "does", "did", "will", "would", "could", "should", "may",
+                "can", "with", "from", "by", "about", "into", "through", "during",
+                "before", "after", "above", "below", "between", "under", "over",
+
+                // 영문 형용사 (의미없는 수식어)
+                "new", "latest", "powerful", "advanced", "strong", "major", "key",
+                "important", "significant", "critical", "innovative", "revolutionary",
+                "breakthrough", "leading", "top", "best", "great", "next", "future",
+                "current", "recent", "upcoming", "previous", "first", "last", "main",
+
+                // 영문 동사 (일반적인 동작)
+                "released", "launched", "announced", "unveiled", "introduced", "revealed",
+                "presented", "showed", "demonstrated", "featured", "offers", "provides",
+                "includes", "supports", "enables", "allows", "makes", "brings", "takes",
+                "gets", "goes", "comes", "using", "used", "based", "designed", "built",
+
+                // 영문 명사 (일반적인 단어)
+                "system", "technology", "company", "companies", "service", "product",
+                "tool", "platform", "solution", "feature", "version", "update", "release",
+                "news", "report", "article", "post", "blog", "paper", "research",
+                "year", "month", "week", "day", "time", "today", "now", "this", "that",
+
+                // 한글 기본 조사 및 어미
+                "이", "그", "저", "것", "수", "등", "및", "에", "의", "를", "을",
+                "가", "이다", "있다", "하다", "되다", "하는", "있는", "되는",
+                "것이다", "수있다", "있습니다", "합니다", "입니다",
+
+                // AI 조사 결합형 (의미없는 패턴) - 소문자만 (toLowerCase로 체크하므로)
+                "ai가", "ai를", "ai의", "ai는", "ai에", "ai와", "ai로",
+                "ai에서", "ai로부터", "ai까지", "ai부터", "ai처럼",
+
+                // 기타 조사 결합형
+                "claude와", "openai의", "google의", "meta의", "구글의",
+                "anthropic의", "microsoft의", "마이크로소프트의",
+
+                // 한글 형용사 (의미없는 수식어)
+                "새로운", "새", "최신", "강력한", "혁신적인", "뛰어난", "중요한",
+                "주요한", "핵심", "주목할", "놀라운", "대단한", "엄청난", "획기적인",
+                "차세대", "미래", "다음", "지난", "다양한", "여러", "많은", "각",
+                "각종", "전체", "모든", "일부", "특정", "해당",
+
+                // 한글 부사 및 연결어
+                "특히", "매우", "아주", "정말", "너무", "가장", "더욱", "더", "덜",
+                "그리고", "또한", "하지만", "그러나", "따라서", "즉", "예를들어",
+                "통해", "위해", "대해", "관련", "따른", "위한", "대한", "통한",
+
+                // 한글 동사 (일반적인 동작)
+                "출시", "발표", "공개", "소개", "제공", "제시", "보여주다", "선보이다",
+                "포함", "지원", "가능", "추가", "개선", "향상", "업데이트", "오픈",
+                "론칭", "런칭", "시작", "진행", "계획", "예정", "예상",
+
+                // 한글 명사 (일반적인 단어)
+                "기술", "서비스", "제품", "기능", "버전", "시스템", "플랫폼",
+                "솔루션", "도구", "툴", "소식", "뉴스", "기사", "보도", "발표문",
+                "연구", "논문", "리포트", "블로그", "포스트",
+                "올해", "작년", "이번", "오늘", "최근", "현재", "지금", "당시",
+                "데이터", "분야", "업계", "사용", "개발", "방법", "방식", "모델",
+                "경우", "때", "결과", "과정", "이후", "이전", "앞으로", "향후"
+        );
         return stopWords.contains(word.toLowerCase());
+    }
+
+    /**
+     * 한글 조사 결합형 체크
+     * - 단어 끝에 조사가 붙은 경우 필터링 (예: "협력은", "에너지의", "직원의", "facts가")
+     */
+    private boolean isParticleEnding(String word) {
+        if (word == null || word.length() < 2) {
+            return false;
+        }
+
+        // 주요 한글 조사 패턴 (끝 1-2글자)
+        String[] particles = {
+                "은", "는", "이", "가",        // 주격 조사
+                "을", "를",                    // 목적격 조사
+                "의",                          // 관형격 조사
+                "에", "에서", "에게",          // 부사격 조사
+                "와", "과",                    // 접속 조사
+                "로", "으로",                  // 부사격 조사
+                "부터", "까지", "처럼",        // 보조사
+                "도", "만", "조차"             // 보조사
+        };
+
+        for (String particle : particles) {
+            if (word.endsWith(particle)) {
+                // 조사를 제거한 나머지가 너무 짧으면 (1글자 이하) 무효
+                String stem = word.substring(0, word.length() - particle.length());
+                if (stem.length() >= 2) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1447,6 +1594,68 @@ public class DailyReportService {
         List<String> hotTopics = new ArrayList<>();          // 급증
         List<String> decliningTopics = new ArrayList<>();    // 감소
         List<String> stableTopics = new ArrayList<>();       // 안정적
+    }
+
+    /**
+     * 긴급도를 점수로 변환 (0.0 ~ 1.0)
+     */
+    private double getUrgencyScore(NewsArticle.UrgencyLevel urgencyLevel) {
+        if (urgencyLevel == null) {
+            return 0.5; // 기본값
+        }
+
+        if (urgencyLevel == NewsArticle.UrgencyLevel.BREAKING) {
+            return 1.0;
+        } else if (urgencyLevel == NewsArticle.UrgencyLevel.TIMELY) {
+            return 0.6;
+        } else { // EVERGREEN
+            return 0.3;
+        }
+    }
+
+    /**
+     * 제목 품질 점수 계산 (0.0 ~ 1.0)
+     * - 제목 길이: 적정 길이 (20-100자) 선호
+     * - 특수문자 비율: 낮을수록 좋음
+     * - 한글/영문 비율: 혼용 적당
+     */
+    private double calculateTitleQuality(NewsArticle article) {
+        String title = article.getTitleKo() != null ? article.getTitleKo() : article.getTitle();
+        if (title == null || title.isEmpty()) {
+            return 0.0;
+        }
+
+        double score = 0.0;
+
+        // 1. 제목 길이 점수 (50%)
+        int length = title.length();
+        double lengthScore;
+        if (length < 10) {
+            lengthScore = 0.3; // 너무 짧음
+        } else if (length >= 10 && length <= 20) {
+            lengthScore = 0.6; // 짧음
+        } else if (length > 20 && length <= 100) {
+            lengthScore = 1.0; // 적정
+        } else if (length > 100 && length <= 150) {
+            lengthScore = 0.7; // 약간 김
+        } else {
+            lengthScore = 0.4; // 너무 김
+        }
+        score += lengthScore * 0.5;
+
+        // 2. 특수문자 비율 (30%) - 낮을수록 좋음
+        long specialCharCount = title.chars()
+                .filter(ch -> !Character.isLetterOrDigit(ch) && !Character.isWhitespace(ch))
+                .count();
+        double specialCharRatio = (double) specialCharCount / length;
+        double specialCharScore = Math.max(0.0, 1.0 - (specialCharRatio * 3)); // 30% 이상이면 0점
+        score += specialCharScore * 0.3;
+
+        // 3. 요약 존재 여부 (20%)
+        boolean hasSummary = article.getSummary() != null && !article.getSummary().isEmpty();
+        score += (hasSummary ? 1.0 : 0.3) * 0.2;
+
+        return Math.min(1.0, Math.max(0.0, score)); // 0.0 ~ 1.0 범위로 제한
     }
 
     /**
